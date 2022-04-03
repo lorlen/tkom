@@ -217,7 +217,7 @@ pattern     ::= identifier ('(' pattern ')')? | literal_range | literal ('|' lit
 range ::= value ('..' | '..=') value;
 literal_range ::= integer ('..' | '..=') integer;
 
-value               ::= identifier | literal | function_call | member_access | '(' expression ')';
+value               ::= function_call | member_access | identifier | literal | '(' expression ')';
 expression          ::= or_expr | if_expr | match_expr | block_expr;
 or_expr             ::= and_expr (or_op and_expr)*;
 and_expr            ::= relational_expr (and_op relational_expr)*;

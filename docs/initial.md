@@ -8,7 +8,7 @@ Projekt ma na celu stworzenie interpretera prostego języka implementującego tz
 
 ## Założenia
 
-- język posiada następujące typy prymitywne: liczby całkowite, liczby zmiennoprzecinkowe i ciągi znaków,
+- język posiada następujące typy prymitywne: liczby całkowite, liczby zmiennoprzecinkowe, wartości logiczne i ciągi znaków,
 - język posiada dwa rodzaje typów złożonych: struktury (typy iloczynowe) oraz enumeracje (typy sumowe, "tagowane unie"),
 - w języku można definiować funkcje:
   - funkcje można definiować tylko na najwyższym poziomie kodu. Nie są wspierane *closures*.
@@ -18,6 +18,11 @@ Projekt ma na celu stworzenie interpretera prostego języka implementującego tz
 - zmiennym, argumentom i wartościom zwracanym trzeba zawsze nadać typ. Inferencja typów nie jest wspierana.
 - wspierane konstrukcje przepływu sterowania to `if`, `match`, `for` i `while`,
 - `if` oraz `match` to wyrażenia: ewaluują do wartości, którą można przypisać do zmiennej,
+- język jest silnie i statycznie typowany,
+- nie ma niejawnych konwersji między typami, wszystkich konwersji musi dokonywać programista przy pomocy operatora `as`,
+- większość operatorów arytmetyczno-relacyjnych jest zdefiniowana jedynie dla typów liczbowych, wyjątkiem jest operator `+`, który jest zdefiniowany również dla typu `string`,
+- operatory działają jedynie dla operandów jednego typu, nie można zrobić np. `2 / 1.5` bez rzutowania,
+- pattern matching nie wspiera destrukturyzacji struktur.
 
 ## Wymagania
 
@@ -218,7 +223,8 @@ or_expr             ::= and_expr (or_op and_expr)*;
 and_expr            ::= relational_expr (and_op relational_expr)*;
 relational_expr     ::= additive_expr ((relational_op | equality_op) additive_expr)*;
 additive_expr       ::= multiplicative_expr (additive_op multiplicative_expr)*;
-multiplicative_expr ::= unary_expr (multiplicative_op unary_expr)*;
+multiplicative_expr ::= as_expr (multiplicative_op as_expr)*;
+as_expr             ::= unary_expr ("as" identifier)?;
 unary_expr          ::= not_op* value;
 member_access       ::= identifier '.' identifier;
 function_call       ::= identifier '(' (expression ',')* expression? ')';

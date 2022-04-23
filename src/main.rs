@@ -2,9 +2,14 @@
 
 mod error;
 mod lexer;
+mod parser;
 mod token;
 
-use std::{fs::File, io::{Read, self}, path::PathBuf};
+use std::{
+    fs::File,
+    io::{self, Read},
+    path::PathBuf,
+};
 
 use clap::Parser;
 use error::{ErrorHandler, FatalError};

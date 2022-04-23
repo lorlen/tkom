@@ -1,0 +1,79 @@
+// comment
+
+// constant
+const u64 SOME_CONSTANT = 1;
+
+// struct
+struct SomeStruct {
+    // some primitive types
+    i64 field1,
+    u64 field2,
+    f64 field3,
+    string field4, // trailing comma should work
+}
+
+// enum (tagged union)
+enum SomeEnum {
+    EmptyVariant,
+    PrimitiveVariant(u64),
+    StructVariant(SomeStruct),
+}
+
+// function definition
+// main - entry point, required
+fn main() {
+    // immutable variable
+    u64 var1 = 1;
+
+    // mutable variable
+    mut u64 var2 = 1;
+
+    // if expression
+    string var3 = if var1 == 1 {
+        "var1 is 1"
+    } else {
+        "var1 is something else"
+    }
+
+    // for loop
+    for u64 i in 0 .. 10 {
+        print("index is ");
+        println(i);
+    }
+
+    // for loop (inclusive end of range)
+    for u64 i in 0 ..= 10 {
+        print("index is ");
+        println(i);
+    }
+
+    // while loop
+    while var2 < 10 {
+        var2 += 1;
+    }
+
+    SomeEnum var3 = EmptyVariant;
+
+    // match expression
+    match var3 {
+        // simple match
+        EmptyVariant => 1,
+
+        // match with variable binding
+        PrimitiveVariant(inner_val) => inner_val,
+
+		StructVariant(str) => {
+			// block of code in an arm
+			println(str.field1);
+		}
+    }
+    
+    match var1 {
+    	1 | 2 => "1 or 2",
+    	3 ..= 5 => "from 3 to 5, inclusive",
+    	_ => "all the rest",
+    }
+    
+    // math expression
+    println(2 + 2 * 2 == 6 & 5 - 4 / 2 == 3);
+}

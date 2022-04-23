@@ -8,7 +8,12 @@ use utf8_read::StreamPosition;
 pub enum FatalError {
     IoError(String),
     MalformedUtf8(StreamPosition),
-    SyntaxError(StreamPosition),
+    SyntaxError {
+        pos: StreamPosition,
+        expected: String,
+        got: String,
+    },
+    UnexpectedCharacter(char, StreamPosition),
     UnexpectedEof(StreamPosition),
     ValueOutOfBounds(StreamPosition),
 }
@@ -19,25 +24,33 @@ impl ErrorHandler {
     pub fn handle_error(error: FatalError) -> ! {
         let message = match error {
             FatalError::IoError(message) => message,
-            FatalError::MalformedUtf8(position) => format!(
+            FatalError::MalformedUtf8(pos) => format!(
                 "Malformed UTF-8 at line {}, column {}",
-                position.line_position().0,
-                position.line_position().1,
+                pos.line_position().0,
+                pos.line_position().1,
             ),
-            FatalError::SyntaxError(position) => format!(
-                "Syntax error at line {}, column {}",
-                position.line_position().0,
-                position.line_position().1,
+            FatalError::SyntaxError { pos, expected, got } => format!(
+                "Syntax error at line {}, column {}: expected {}, got {}",
+                pos.line_position().0,
+                pos.line_position().1,
+                expected,
+                got,
             ),
-            FatalError::UnexpectedEof(position) => format!(
+            FatalError::UnexpectedCharacter(char, pos) => format!(
+                "Unexpected character '{}' at line {}, column {}",
+                char,
+                pos.line_position().0,
+                pos.line_position().1,
+            ),
+            FatalError::UnexpectedEof(pos) => format!(
                 "Unexpected EOF while parsing: line {}, column {}",
-                position.line_position().0,
-                position.line_position().1,
+                pos.line_position().0,
+                pos.line_position().1,
             ),
-            FatalError::ValueOutOfBounds(position) => format!(
+            FatalError::ValueOutOfBounds(pos) => format!(
                 "Value out of bounds: line {}, column {}",
-                position.line_position().0,
-                position.line_position().1
+                pos.line_position().0,
+                pos.line_position().1
             ),
         };
         eprintln!("{}", message);

@@ -1,6 +1,6 @@
 //! Types defining the lexical structure of the language
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use lazy_static::lazy_static;
 use utf8_read::StreamPosition;
@@ -50,13 +50,17 @@ pub enum TokenKind {
     DivideAssign,
     ModuloAssign,
 
-    // Parentheses and brackets
+    // Punctuation
     ParenOpen,
     ParenClose,
     BracketOpen,
     BracketClose,
     SqBracketOpen,
     SqBracketClose,
+    Dot,
+    Comma,
+    Semicolon,
+    FatArrow,
 
     // Language constructs
     If,
@@ -68,6 +72,11 @@ pub enum TokenKind {
     Struct,
     Enum,
     Mut,
+    Range,
+
+    // Keyword literals
+    True,
+    False,
 }
 
 lazy_static! {
@@ -81,7 +90,11 @@ lazy_static! {
         ("struct", TokenKind::Struct),
         ("enum", TokenKind::Enum),
         ("mut", TokenKind::Mut),
+        ("true", TokenKind::True),
+        ("false", TokenKind::False),
     ]);
+    pub static ref OPERATOR_CHARS: HashSet<char> =
+        HashSet::from(['+', '-', '*', '/', '%', '=', '!', '>', '<', '&', '|', '.']);
 }
 
 #[derive(Clone, Debug)]

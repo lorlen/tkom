@@ -1,0 +1,57 @@
+program ::= (function_def | struct_def | enum_def | const_def | comment)*;
+comment ::= '//' #'[^\n]';
+
+var_def         ::= 'mut'? identifier assignment_stmt ';';
+const_def       ::= 'const' identifier assignment_stmt ';';
+enum_def        ::= 'enum' identifier '{' (identifier '(' identifier ')' ',')* (identifier '(' identifier ')')? '}';
+struct_def      ::= 'struct' identifier '{' (identifier identifier ',')* (identifier identifier)? '}';
+function_def    ::= 'fn' '(' (identifier identifier ',')* (identifier identifier)? ')' ('->' identifier)? block_expr;
+
+statement       ::= var_def | const_def | assignment_stmt | return_stmt | for_stmt | while_stmt | expression ';';
+while_stmt      ::= 'while' expression block_expr;
+for_stmt        ::= 'for' identifier identifier 'in' range block_expr;
+return_stmt     ::= 'return' expression ';';
+assignment_stmt ::= identifier assignment_op expression ';';
+
+block_expr  ::= '{' (statement | comment)* (expression | comment)? '}';
+match_expr  ::= 'match' identifier '{' (match_arm ',')* match_arm '}';
+if_expr     ::= 'if' expression block_expr ('else' 'if' expression block_expr)* ('else' block_expr)?;
+
+match_arm   ::= pattern '=>' expression;
+pattern     ::= identifier ('(' pattern ')')? | literal_range | literal ('|' literal)*;
+
+range ::= value ('..' | '..=') value;
+literal_range ::= integer ('..' | '..=') integer;
+
+value               ::= function_call | member_access | identifier | literal | '(' expression ')';
+expression          ::= or_expr | if_expr | match_expr | block_expr;
+or_expr             ::= and_expr (or_op and_expr)*;
+and_expr            ::= relational_expr (and_op relational_expr)*;
+relational_expr     ::= additive_expr ((relational_op | equality_op) additive_expr)*;
+additive_expr       ::= multiplicative_expr (additive_op multiplicative_expr)*;
+multiplicative_expr ::= as_expr (multiplicative_op as_expr)*;
+as_expr             ::= unary_expr ("as" identifier)?;
+unary_expr          ::= not_op* value;
+member_access       ::= identifier '.' identifier;
+function_call       ::= identifier '(' (expression ',')* expression? ')';
+
+not_op              ::= '!';
+or_op               ::= '||';
+and_op              ::= '&&';
+relational_op       ::= '>' | '<' | '>=' | '<=';
+equality_op         ::= '==' | '!=';
+additive_op         ::= '+' | '-';
+multiplicative_op   ::= '*' | '/' | '%';
+assignment_op       ::= '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&&=' | '||=';
+
+literal     ::= number | string;
+number      ::= integer | float;
+string      ::= '"' character* '"';
+float       ::= (integer '.' digit*) | ('.' digit+);
+integer     ::= ('+' | '-') nonzero_digit digit*;
+identifier  ::= (letter | '_') (letter | digit | '_')*;
+
+character       ::= #'[^"]';
+nonzero_digit   ::= #'[1-9]';
+digit           ::= #'[0-9]';
+letter          ::= #'[a-zA-Z]';

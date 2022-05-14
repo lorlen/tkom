@@ -1,14 +1,16 @@
 //! Types defining the lexical structure of the language
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 use lazy_static::lazy_static;
 use utf8_read::StreamPosition;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum NumberType {
-    Signed(i64),
-    Unsigned(u64),
+    Integer(u64),
     Float(f64),
 }
 
@@ -50,6 +52,9 @@ pub enum TokenKind {
     DivideAssign,
     ModuloAssign,
 
+    // Cast operator
+    As,
+
     // Punctuation
     ParenOpen,
     ParenClose,
@@ -60,18 +65,23 @@ pub enum TokenKind {
     Dot,
     Comma,
     Semicolon,
-    FatArrow,
+    ThinArrow,
 
     // Language constructs
     If,
+    Else,
     Match,
     While,
     For,
+    In,
     Fn,
     Return,
+    Yield,
     Struct,
     Enum,
+    Let,
     Mut,
+    Const,
     Range,
 
     // Keyword literals
@@ -79,17 +89,35 @@ pub enum TokenKind {
     False,
 }
 
+impl Display for TokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Self::Number(_) => write!(f, "Number"),
+            Self::String(_) => write!(f, "String"),
+            Self::Identifier(_) => write!(f, "Identifier"),
+            Self::Comment(_) => write!(f, "Comment"),
+            _ => write!(f, "{:?}", self),
+        }
+    }
+}
+
 lazy_static! {
     pub static ref KEYWORDS: HashMap<&'static str, TokenKind> = HashMap::from([
         ("if", TokenKind::If),
+        ("else", TokenKind::Else),
         ("match", TokenKind::Match),
         ("while", TokenKind::While),
         ("for", TokenKind::For),
+        ("in", TokenKind::In),
         ("fn", TokenKind::Fn),
         ("return", TokenKind::Return),
+        ("yield", TokenKind::Yield),
         ("struct", TokenKind::Struct),
         ("enum", TokenKind::Enum),
+        ("let", TokenKind::Let),
         ("mut", TokenKind::Mut),
+        ("const", TokenKind::Const),
+        ("as", TokenKind::As),
         ("true", TokenKind::True),
         ("false", TokenKind::False),
     ]);

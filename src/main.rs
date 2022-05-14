@@ -3,7 +3,6 @@
 mod error;
 mod lexer;
 mod parser;
-mod token;
 
 use std::{
     fs::File,
@@ -11,14 +10,14 @@ use std::{
     path::PathBuf,
 };
 
-use clap::Parser;
+use clap::Parser as ArgParser;
 use error::{ErrorHandler, FatalError};
 use utf8_read::Reader;
 
-use crate::lexer::Lexer;
+use crate::{lexer::LexerImpl, parser::Parser};
 
 /// An interpreter for a small, Rust-inspired language
-#[derive(Parser)]
+#[derive(ArgParser)]
 #[clap(about)]
 struct Args {
     /// Path to a file containing the code to execute, or - to read from stdin
@@ -41,9 +40,9 @@ fn main() {
         Reader::new(Box::new(file))
     };
 
-    let lexer = Lexer::new(reader);
+    let lexer = LexerImpl::new(reader);
+    let mut parser = Parser::new(Box::new(lexer));
+    let program = parser.parse();
 
-    for token in lexer {
-        println!("{:?}", token);
-    }
+    println!("{:#?}", program);
 }

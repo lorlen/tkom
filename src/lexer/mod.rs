@@ -8,33 +8,38 @@
 //!   on token boundaries and in the whitespace. Unexpected EOFs occur inside
 //!   of tokens, and cause a fatal error to be reported.
 
+pub(crate) mod token;
+
 use std::io::Read;
 
 use utf8_read::{Char, Reader, StreamPosition};
 
 use crate::{
     error::{ErrorHandler, FatalError},
-    token::{NumberType, Token, TokenKind, KEYWORDS, OPERATOR_CHARS},
+    lexer::token::{NumberType, Token, TokenKind, KEYWORDS, OPERATOR_CHARS},
 };
 
-pub struct Lexer {
+pub trait Lexer: Iterator<Item = Token> {
+    fn curr_pos(&self) -> &StreamPosition;
+    fn curr_token(&self) -> &Option<Token>;
+}
+
+pub struct LexerImpl {
     reader: Reader<Box<dyn Read>>,
     curr_char: char,
     curr_pos: StreamPosition,
+    curr_token: Option<Token>,
 }
 
-impl Lexer {
-    pub fn new(reader: Reader<Box<dyn Read>>) -> Lexer {
+impl LexerImpl {
+    pub fn new(reader: Reader<Box<dyn Read>>) -> LexerImpl {
         let pos = *reader.borrow_pos();
-        Lexer {
+        LexerImpl {
             reader,
             curr_char: ' ',
             curr_pos: pos,
+            curr_token: None,
         }
-    }
-
-    pub fn curr_pos(&self) -> &StreamPosition {
-        &self.curr_pos
     }
 
     fn token(&self, kind: TokenKind) -> Token {
@@ -101,7 +106,7 @@ impl Lexer {
 
                 match self.next_char() {
                     Some('/') if first_char == '/' => self.try_build_comment(),
-                    Some('>') if first_char == '=' => Some(self.token(TokenKind::FatArrow)),
+                    Some('>') if first_char == '-' => Some(self.token(TokenKind::ThinArrow)),
                     Some('=') => match first_char {
                         '+' => Some(self.token(TokenKind::PlusAssign)),
                         '-' => Some(self.token(TokenKind::MinusAssign)),
@@ -198,11 +203,10 @@ impl Lexer {
                                 '\\' => content.push('\\'),
                                 '0' => content.push('\0'),
                                 '"' => content.push('"'),
-                                _ => ErrorHandler::handle_error(FatalError::SyntaxError {
-                                    pos: *self.reader.borrow_pos(),
-                                    expected: "an escape character".to_owned(),
-                                    got: format!("'{}'", escape_char),
-                                }),
+                                _ => ErrorHandler::handle_error(FatalError::InvalidEscapeChar(
+                                    escape_char,
+                                    *self.reader.borrow_pos(),
+                                )),
                             }
                         }
                         '"' => break,
@@ -217,7 +221,7 @@ impl Lexer {
             _ => None,
         };
 
-        if let Some(_) = token {
+        if token.is_some() {
             self.next_char();
         }
 
@@ -236,7 +240,7 @@ impl Lexer {
             return None;
         }
 
-        while let Some(_) = self.next_char() {
+        while self.next_char().is_some() {
             if self.curr_char.is_ascii_digit() {
                 if !is_float {
                     match unsigned
@@ -244,9 +248,9 @@ impl Lexer {
                         .and_then(|val| val.checked_add(self.curr_char as u64 - '0' as u64))
                     {
                         Some(val) => unsigned = val,
-                        None => {
-                            ErrorHandler::handle_error(FatalError::ValueOutOfBounds(self.curr_pos))
-                        }
+                        None => ErrorHandler::handle_error(FatalError::LiteralOutOfBounds(
+                            self.curr_pos,
+                        )),
                     }
                 } else {
                     float +=
@@ -263,30 +267,29 @@ impl Lexer {
 
         match is_float {
             true => Some(self.token(TokenKind::Number(NumberType::Float(float)))),
-            false => Some(self.token(TokenKind::Number(NumberType::Unsigned(unsigned)))),
+            false => Some(self.token(TokenKind::Number(NumberType::Integer(unsigned)))),
         }
     }
 }
 
-impl Iterator for Lexer {
+impl Iterator for LexerImpl {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.ignore_whitespace()?;
-
-        if self.reader.eof() {
+        if self.ignore_whitespace().is_none() || self.reader.eof() {
+            self.curr_token = None;
             return None;
         }
 
         self.curr_pos = *self.reader.borrow_pos();
 
-        let result = self
+        self.curr_token = self
             .try_build_identifier_or_keyword()
             .or_else(|| self.try_build_string())
             .or_else(|| self.try_build_number())
             .or_else(|| self.try_build_operator_or_comment());
 
-        match result {
+        match self.curr_token.clone() {
             Some(token) => Some(token),
             None => ErrorHandler::handle_error(FatalError::UnexpectedCharacter(
                 self.curr_char,
@@ -296,14 +299,24 @@ impl Iterator for Lexer {
     }
 }
 
+impl Lexer for LexerImpl {
+    fn curr_pos(&self) -> &StreamPosition {
+        &self.curr_pos
+    }
+
+    fn curr_token(&self) -> &Option<Token> {
+        &self.curr_token
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs::File;
 
     use super::*;
 
-    fn lexer_from_str(s: &'static str) -> Lexer {
-        Lexer::new(Reader::new(Box::new(s.as_bytes())))
+    fn lexer_from_str(s: &'static str) -> LexerImpl {
+        LexerImpl::new(Reader::new(Box::new(s.as_bytes())))
     }
 
     #[test]
@@ -394,17 +407,17 @@ mod tests {
 
     #[test]
     fn test_file() {
-        let lexer = Lexer::new(Reader::new(Box::new(File::open("snippet.txt").unwrap())));
+        let lexer = LexerImpl::new(Reader::new(Box::new(File::open("snippet.txt").unwrap())));
         assert_eq!(
             lexer.map(|token| token.kind).collect::<Vec<_>>(),
             vec![
                 TokenKind::Comment("comment".to_owned()),
                 TokenKind::Comment("constant".to_owned()),
-                TokenKind::Identifier("const".to_owned()),
+                TokenKind::Const,
                 TokenKind::Identifier("u64".to_owned()),
                 TokenKind::Identifier("SOME_CONSTANT".to_owned()),
                 TokenKind::Assign,
-                TokenKind::Number(NumberType::Unsigned(1)),
+                TokenKind::Number(NumberType::Integer(1)),
                 TokenKind::Semicolon,
                 TokenKind::Comment("struct".to_owned()),
                 TokenKind::Struct,
@@ -450,41 +463,49 @@ mod tests {
                 TokenKind::ParenClose,
                 TokenKind::BracketOpen,
                 TokenKind::Comment("immutable variable".to_owned()),
+                TokenKind::Let,
                 TokenKind::Identifier("u64".to_owned()),
                 TokenKind::Identifier("var1".to_owned()),
                 TokenKind::Assign,
-                TokenKind::Number(NumberType::Unsigned(1)),
+                TokenKind::Number(NumberType::Integer(1)),
                 TokenKind::Semicolon,
                 TokenKind::Comment("mutable variable".to_owned()),
+                TokenKind::Let,
                 TokenKind::Mut,
                 TokenKind::Identifier("u64".to_owned()),
                 TokenKind::Identifier("var2".to_owned()),
                 TokenKind::Assign,
-                TokenKind::Number(NumberType::Unsigned(1)),
+                TokenKind::Number(NumberType::Integer(1)),
                 TokenKind::Semicolon,
                 TokenKind::Comment("if expression".to_owned()),
+                TokenKind::Let,
                 TokenKind::Identifier("string".to_owned()),
                 TokenKind::Identifier("var3".to_owned()),
                 TokenKind::Assign,
                 TokenKind::If,
                 TokenKind::Identifier("var1".to_owned()),
                 TokenKind::Equal,
-                TokenKind::Number(NumberType::Unsigned(1)),
+                TokenKind::Number(NumberType::Integer(1)),
                 TokenKind::BracketOpen,
+                TokenKind::Yield,
                 TokenKind::String("var1 is 1".to_owned()),
+                TokenKind::Semicolon,
                 TokenKind::BracketClose,
-                TokenKind::Identifier("else".to_owned()),
+                TokenKind::Else,
                 TokenKind::BracketOpen,
+                TokenKind::Yield,
                 TokenKind::String("var1 is something else".to_owned()),
+                TokenKind::Semicolon,
                 TokenKind::BracketClose,
+                TokenKind::Semicolon,
                 TokenKind::Comment("for loop".to_owned()),
                 TokenKind::For,
                 TokenKind::Identifier("u64".to_owned()),
                 TokenKind::Identifier("i".to_owned()),
-                TokenKind::Identifier("in".to_owned()),
-                TokenKind::Number(NumberType::Unsigned(0)),
+                TokenKind::In,
+                TokenKind::Number(NumberType::Integer(0)),
                 TokenKind::Range,
-                TokenKind::Number(NumberType::Unsigned(10)),
+                TokenKind::Number(NumberType::Integer(10)),
                 TokenKind::BracketOpen,
                 TokenKind::Identifier("print".to_owned()),
                 TokenKind::ParenOpen,
@@ -501,11 +522,11 @@ mod tests {
                 TokenKind::For,
                 TokenKind::Identifier("u64".to_owned()),
                 TokenKind::Identifier("i".to_owned()),
-                TokenKind::Identifier("in".to_owned()),
-                TokenKind::Number(NumberType::Unsigned(0)),
+                TokenKind::In,
+                TokenKind::Number(NumberType::Integer(0)),
                 TokenKind::Range,
                 TokenKind::Assign,
-                TokenKind::Number(NumberType::Unsigned(10)),
+                TokenKind::Number(NumberType::Integer(10)),
                 TokenKind::BracketOpen,
                 TokenKind::Identifier("print".to_owned()),
                 TokenKind::ParenOpen,
@@ -522,17 +543,21 @@ mod tests {
                 TokenKind::While,
                 TokenKind::Identifier("var2".to_owned()),
                 TokenKind::LessThan,
-                TokenKind::Number(NumberType::Unsigned(10)),
+                TokenKind::Number(NumberType::Integer(10)),
                 TokenKind::BracketOpen,
                 TokenKind::Identifier("var2".to_owned()),
                 TokenKind::PlusAssign,
-                TokenKind::Number(NumberType::Unsigned(1)),
+                TokenKind::Number(NumberType::Integer(1)),
                 TokenKind::Semicolon,
                 TokenKind::BracketClose,
+                TokenKind::Let,
                 TokenKind::Identifier("SomeEnum".to_owned()),
                 TokenKind::Identifier("var3".to_owned()),
                 TokenKind::Assign,
+                TokenKind::Identifier("new".to_owned()),
+                TokenKind::ParenOpen,
                 TokenKind::Identifier("EmptyVariant".to_owned()),
+                TokenKind::ParenClose,
                 TokenKind::Semicolon,
                 TokenKind::Comment("match expression".to_owned()),
                 TokenKind::Match,
@@ -540,22 +565,24 @@ mod tests {
                 TokenKind::BracketOpen,
                 TokenKind::Comment("simple match".to_owned()),
                 TokenKind::Identifier("EmptyVariant".to_owned()),
-                TokenKind::FatArrow,
-                TokenKind::Number(NumberType::Unsigned(1)),
+                TokenKind::ParenOpen,
+                TokenKind::ParenClose,
+                TokenKind::ThinArrow,
+                TokenKind::Number(NumberType::Integer(1)),
                 TokenKind::Comma,
                 TokenKind::Comment("match with variable binding".to_owned()),
                 TokenKind::Identifier("PrimitiveVariant".to_owned()),
                 TokenKind::ParenOpen,
                 TokenKind::Identifier("inner_val".to_owned()),
                 TokenKind::ParenClose,
-                TokenKind::FatArrow,
+                TokenKind::ThinArrow,
                 TokenKind::Identifier("inner_val".to_owned()),
                 TokenKind::Comma,
                 TokenKind::Identifier("StructVariant".to_owned()),
                 TokenKind::ParenOpen,
                 TokenKind::Identifier("str".to_owned()),
                 TokenKind::ParenClose,
-                TokenKind::FatArrow,
+                TokenKind::ThinArrow,
                 TokenKind::BracketOpen,
                 TokenKind::Comment("block of code in an arm".to_owned()),
                 TokenKind::Identifier("println".to_owned()),
@@ -570,42 +597,42 @@ mod tests {
                 TokenKind::Match,
                 TokenKind::Identifier("var1".to_owned()),
                 TokenKind::BracketOpen,
-                TokenKind::Number(NumberType::Unsigned(1)),
+                TokenKind::Number(NumberType::Integer(1)),
                 TokenKind::Or,
-                TokenKind::Number(NumberType::Unsigned(2)),
-                TokenKind::FatArrow,
+                TokenKind::Number(NumberType::Integer(2)),
+                TokenKind::ThinArrow,
                 TokenKind::String("1 or 2".to_owned()),
                 TokenKind::Comma,
-                TokenKind::Number(NumberType::Unsigned(3)),
+                TokenKind::Number(NumberType::Integer(3)),
                 TokenKind::Range,
                 TokenKind::Assign,
-                TokenKind::Number(NumberType::Unsigned(5)),
-                TokenKind::FatArrow,
+                TokenKind::Number(NumberType::Integer(5)),
+                TokenKind::ThinArrow,
                 TokenKind::String("from 3 to 5, inclusive".to_owned()),
                 TokenKind::Comma,
                 TokenKind::Identifier("_".to_owned()),
-                TokenKind::FatArrow,
+                TokenKind::ThinArrow,
                 TokenKind::String("all the rest".to_owned()),
                 TokenKind::Comma,
                 TokenKind::BracketClose,
                 TokenKind::Comment("math expression".to_owned()),
                 TokenKind::Identifier("println".to_owned()),
                 TokenKind::ParenOpen,
-                TokenKind::Number(NumberType::Unsigned(2)),
+                TokenKind::Number(NumberType::Integer(2)),
                 TokenKind::Plus,
-                TokenKind::Number(NumberType::Unsigned(2)),
+                TokenKind::Number(NumberType::Integer(2)),
                 TokenKind::Multiply,
-                TokenKind::Number(NumberType::Unsigned(2)),
+                TokenKind::Number(NumberType::Integer(2)),
                 TokenKind::Equal,
-                TokenKind::Number(NumberType::Unsigned(6)),
+                TokenKind::Number(NumberType::Integer(6)),
                 TokenKind::And,
-                TokenKind::Number(NumberType::Unsigned(5)),
+                TokenKind::Number(NumberType::Integer(5)),
                 TokenKind::Minus,
-                TokenKind::Number(NumberType::Unsigned(4)),
+                TokenKind::Number(NumberType::Integer(4)),
                 TokenKind::Divide,
-                TokenKind::Number(NumberType::Unsigned(2)),
+                TokenKind::Number(NumberType::Integer(2)),
                 TokenKind::Equal,
-                TokenKind::Number(NumberType::Unsigned(3)),
+                TokenKind::Number(NumberType::Integer(3)),
                 TokenKind::ParenClose,
                 TokenKind::Semicolon,
                 TokenKind::BracketClose,

@@ -72,8 +72,6 @@ impl Parser {
     fn next_token(&mut self) {
         self.lexer.next();
         self.ignore_comments();
-        // REMOVE: DEBUG
-        println!("{:?}", *self.lexer.curr_token());
     }
 
     fn token_is(&self, kinds: &[TokenKind]) -> bool {

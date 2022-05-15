@@ -2,6 +2,7 @@
 //! of tokens
 
 pub(crate) mod nodes;
+mod tests;
 
 use std::mem::discriminant;
 
@@ -31,6 +32,13 @@ impl Parser {
         self.next_token();
 
         while self.lexer.curr_token().is_some() {
+            self.token_is_or_error(&[
+                TokenKind::Const,
+                TokenKind::Struct,
+                TokenKind::Enum,
+                TokenKind::Fn,
+            ]);
+
             if let Some(const_def) = self.parse_const_def() {
                 program.const_defs.push(const_def);
             }
@@ -425,34 +433,15 @@ impl Parser {
         let mut ops: Vec<Operator> = Vec::new();
         let mut subexprs: Vec<Expression> = Vec::new();
 
-        loop {
-            ops.push(match self.lexer.curr_token() {
-                Some(Token {
-                    kind: TokenKind::Equal,
-                    ..
-                }) => Operator::Equal,
-                Some(Token {
-                    kind: TokenKind::NotEqual,
-                    ..
-                }) => Operator::NotEqual,
-                Some(Token {
-                    kind: TokenKind::GreaterThan,
-                    ..
-                }) => Operator::GreaterThan,
-                Some(Token {
-                    kind: TokenKind::GreaterEqual,
-                    ..
-                }) => Operator::GreaterEqual,
-                Some(Token {
-                    kind: TokenKind::LessThan,
-                    ..
-                }) => Operator::LessThan,
-                Some(Token {
-                    kind: TokenKind::LessEqual,
-                    ..
-                }) => Operator::LessEqual,
-                _ => break,
-            });
+        while self.token_is(&[
+            TokenKind::Equal,
+            TokenKind::NotEqual,
+            TokenKind::GreaterThan,
+            TokenKind::GreaterEqual,
+            TokenKind::LessThan,
+            TokenKind::LessEqual,
+        ]) {
+            ops.push(Operator::try_from(self.lexer.curr_token().clone().unwrap().kind).unwrap());
             self.next_token();
             subexprs.push(Self::required(
                 self.parse_add_expr(),
@@ -473,18 +462,8 @@ impl Parser {
         let mut ops: Vec<Operator> = Vec::new();
         let mut subexprs: Vec<Expression> = Vec::new();
 
-        loop {
-            ops.push(match self.lexer.curr_token() {
-                Some(Token {
-                    kind: TokenKind::Plus,
-                    ..
-                }) => Operator::Plus,
-                Some(Token {
-                    kind: TokenKind::Minus,
-                    ..
-                }) => Operator::Minus,
-                _ => break,
-            });
+        while self.token_is(&[TokenKind::Plus, TokenKind::Minus]) {
+            ops.push(Operator::try_from(self.lexer.curr_token().clone().unwrap().kind).unwrap());
             self.next_token();
             subexprs.push(Self::required(
                 self.parse_mul_expr(),
@@ -505,22 +484,8 @@ impl Parser {
         let mut ops: Vec<Operator> = Vec::new();
         let mut subexprs: Vec<Expression> = Vec::new();
 
-        loop {
-            ops.push(match self.lexer.curr_token() {
-                Some(Token {
-                    kind: TokenKind::Multiply,
-                    ..
-                }) => Operator::Multiply,
-                Some(Token {
-                    kind: TokenKind::Divide,
-                    ..
-                }) => Operator::Divide,
-                Some(Token {
-                    kind: TokenKind::Modulo,
-                    ..
-                }) => Operator::Modulo,
-                _ => break,
-            });
+        while self.token_is(&[TokenKind::Multiply, TokenKind::Divide, TokenKind::Modulo]) {
+            ops.push(Operator::try_from(self.lexer.curr_token().clone().unwrap().kind).unwrap());
             self.next_token();
             subexprs.push(Self::required(
                 self.parse_as_expr(),
@@ -555,18 +520,9 @@ impl Parser {
     fn parse_unary_expr(&mut self) -> Option<Expression> {
         let mut ops: Vec<Operator> = Vec::new();
 
-        loop {
-            ops.push(match self.lexer.curr_token() {
-                Some(Token {
-                    kind: TokenKind::Not,
-                    ..
-                }) => Operator::Not,
-                Some(Token {
-                    kind: TokenKind::Minus,
-                    ..
-                }) => Operator::Minus,
-                _ => break,
-            });
+        while self.token_is(&[TokenKind::Not, TokenKind::Minus]) {
+            ops.push(Operator::try_from(self.lexer.curr_token().clone().unwrap().kind).unwrap());
+            self.next_token();
         }
 
         if ops.is_empty() {
@@ -703,12 +659,9 @@ impl Parser {
                     Some(PatternPart::Literal(LiteralOrRange::Literal(lower)))
                 }
             }
-            TokenKind::String(_) | TokenKind::True | TokenKind::False => {
-                self.next_token();
-                Some(PatternPart::Literal(LiteralOrRange::Literal(
-                    self.parse_literal().unwrap(),
-                )))
-            }
+            TokenKind::String(_) | TokenKind::True | TokenKind::False => Some(
+                PatternPart::Literal(LiteralOrRange::Literal(self.parse_literal().unwrap())),
+            ),
             TokenKind::Identifier(i) if i == "_" => {
                 self.next_token();
                 Some(PatternPart::CatchAll)
@@ -719,7 +672,7 @@ impl Parser {
                 if self.check_and_consume(&[TokenKind::ParenOpen]).is_some() {
                     let inner_pattern = self.parse_pattern();
                     self.consume_or_error(&[TokenKind::ParenClose]);
-                    Some(PatternPart::EnumVariant(inner_pattern))
+                    Some(PatternPart::EnumVariant(i2, inner_pattern))
                 } else {
                     Some(PatternPart::Binding(i2))
                 }
@@ -885,35 +838,5 @@ impl Parser {
 
         self.consume_or_error(&[TokenKind::Semicolon]);
         result
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::fs::File;
-
-    use utf8_read::Reader;
-
-    use crate::lexer::LexerImpl;
-
-    use super::*;
-
-    macro_rules! parser_test {
-        (string, $name:ident, $text:expr, $program:expr) => {
-            #[test]
-            fn $name() {
-                let lexer = LexerImpl::new(Reader::new(Box::new(text.as_bytes())));
-                let parser = Parser::new(lexer);
-                assert_eq!(parser.parse(), $program);
-            }
-        };
-        (file, $name:ident, $filename:expr, $program:expr) => {
-            #[test]
-            fn $name() {
-                let lexer = LexerImpl::new(Reader::new(Box::new(File::open($filename).unwrap())));
-                let parser = Parser::new(lexer);
-                assert_eq!(parser.parse(), $program);
-            }
-        };
     }
 }

@@ -196,7 +196,7 @@ pub struct MatchArm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PatternPart {
-    EnumVariant(Vec<PatternPart>),
+    EnumVariant(Identifier, Vec<PatternPart>),
     Literal(LiteralOrRange),
     Binding(Identifier),
     CatchAll,

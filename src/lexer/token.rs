@@ -1,8 +1,7 @@
 //! Types defining the lexical structure of the language
 
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
-use lazy_static::lazy_static;
 use utf8_read::StreamPosition;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -110,26 +109,27 @@ impl Token {
     }
 }
 
-lazy_static! {
-    pub static ref KEYWORDS: HashMap<&'static str, TokenKind> = HashMap::from([
-        ("if", TokenKind::If),
-        ("else", TokenKind::Else),
-        ("match", TokenKind::Match),
-        ("while", TokenKind::While),
-        ("for", TokenKind::For),
-        ("in", TokenKind::In),
-        ("fn", TokenKind::Fn),
-        ("return", TokenKind::Return),
-        ("yield", TokenKind::Yield),
-        ("struct", TokenKind::Struct),
-        ("enum", TokenKind::Enum),
-        ("let", TokenKind::Let),
-        ("mut", TokenKind::Mut),
-        ("const", TokenKind::Const),
-        ("as", TokenKind::As),
-        ("true", TokenKind::True),
-        ("false", TokenKind::False),
-    ]);
+pub fn try_get_keyword(keyword: &str) -> Option<TokenKind> {
+    match keyword {
+        "if" => Some(TokenKind::If),
+        "else" => Some(TokenKind::Else),
+        "match" => Some(TokenKind::Match),
+        "while" => Some(TokenKind::While),
+        "for" => Some(TokenKind::For),
+        "in" => Some(TokenKind::In),
+        "fn" => Some(TokenKind::Fn),
+        "return" => Some(TokenKind::Return),
+        "yield" => Some(TokenKind::Yield),
+        "struct" => Some(TokenKind::Struct),
+        "enum" => Some(TokenKind::Enum),
+        "let" => Some(TokenKind::Let),
+        "mut" => Some(TokenKind::Mut),
+        "const" => Some(TokenKind::Const),
+        "as" => Some(TokenKind::As),
+        "true" => Some(TokenKind::True),
+        "false" => Some(TokenKind::False),
+        _ => None,
+    }
 }
 
 pub static OPERATOR_CHARS: &'static str = "+-*/%=!<>&|.";

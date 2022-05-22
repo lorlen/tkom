@@ -17,7 +17,7 @@ use utf8_read::{Char, Reader, StreamPosition};
 
 use crate::{
     error::{ErrorHandler, FatalError},
-    lexer::token::{NumberType, Token, TokenKind, KEYWORDS, OPERATOR_CHARS},
+    lexer::token::{try_get_keyword, NumberType, Token, TokenKind, OPERATOR_CHARS},
 };
 
 pub trait Lexer: Iterator<Item = Token> {
@@ -170,10 +170,11 @@ impl LexerImpl {
                     char = self.next_char().unwrap_or(' ');
                 }
 
-                match KEYWORDS.get(&content[..]) {
-                    Some(kind) => Some(self.token(kind.clone())),
-                    None => Some(self.token(TokenKind::Identifier(content))),
-                }
+                Some(
+                    self.token(
+                        try_get_keyword(&content[..]).unwrap_or(TokenKind::Identifier(content)),
+                    ),
+                )
             }
             _ => None,
         }

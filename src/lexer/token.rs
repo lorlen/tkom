@@ -1,9 +1,6 @@
 //! Types defining the lexical structure of the language
 
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-};
+use std::{collections::HashMap, fmt::Display};
 
 use lazy_static::lazy_static;
 use utf8_read::StreamPosition;
@@ -101,6 +98,18 @@ impl Display for TokenKind {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub position: StreamPosition,
+}
+
+impl Token {
+    pub fn new(kind: TokenKind, position: StreamPosition) -> Token {
+        Token { kind, position }
+    }
+}
+
 lazy_static! {
     pub static ref KEYWORDS: HashMap<&'static str, TokenKind> = HashMap::from([
         ("if", TokenKind::If),
@@ -121,18 +130,6 @@ lazy_static! {
         ("true", TokenKind::True),
         ("false", TokenKind::False),
     ]);
-    pub static ref OPERATOR_CHARS: HashSet<char> =
-        HashSet::from(['+', '-', '*', '/', '%', '=', '!', '>', '<', '&', '|', '.']);
 }
 
-#[derive(Clone, Debug)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub position: StreamPosition,
-}
-
-impl Token {
-    pub fn new(kind: TokenKind, position: StreamPosition) -> Token {
-        Token { kind, position }
-    }
-}
+pub static OPERATOR_CHARS: &'static str = "+-*/%=!<>&|.";

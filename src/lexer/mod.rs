@@ -27,8 +27,8 @@ pub trait Lexer: Iterator<Item = Token> {
 
 pub struct LexerImpl {
     reader: Reader<Box<dyn Read>>,
-    curr_char: char,
     curr_pos: StreamPosition,
+    curr_char: Option<char>,
     curr_token: Option<Token>,
 }
 
@@ -37,8 +37,8 @@ impl LexerImpl {
         let pos = *reader.borrow_pos();
         LexerImpl {
             reader,
-            curr_char: ' ',
             curr_pos: pos,
+            curr_char: Some(' '),
             curr_token: None,
         }
     }
@@ -53,16 +53,16 @@ impl LexerImpl {
             utf8_read::Error::MalformedUtf8(position, _) => FatalError::MalformedUtf8(position),
         }));
 
-        match char {
-            Char::Char(c) => {
-                self.curr_char = c;
-                Some(c)
-            }
+        let char_opt = match char {
+            Char::Char(c) => Some(c),
             _ => None,
-        }
+        };
+
+        self.curr_char = char_opt;
+        char_opt
     }
 
-    fn next_char_eof(&mut self) -> char {
+    fn next_char_ensure_no_eof(&mut self) -> char {
         match self.next_char() {
             Some(c) => c,
             None => {
@@ -71,41 +71,43 @@ impl LexerImpl {
         }
     }
 
-    fn ignore_whitespace(&mut self) -> Option<()> {
-        if self.curr_char.is_whitespace() {
-            while self.next_char()?.is_whitespace() {}
+    fn check_and_consume(&mut self, chars: &str) -> Option<char> {
+        match self.curr_char {
+            Some(c) if chars.contains(c) => {
+                self.next_char();
+                Some(c)
+            }
+            _ => None,
         }
-        Some(())
+    }
+
+    fn ignore_whitespace(&mut self) {
+        while matches!(self.curr_char, Some(c) if c.is_whitespace()) {
+            self.next_char();
+        }
     }
 
     fn try_build_operator_or_comment(&mut self) -> Option<Token> {
-        let mut needs_to_read_next = true;
+        match self.check_and_consume("(){}[],;&|.+-*/%<>!=") {
+            Some('(') => Some(self.token(TokenKind::ParenOpen)),
+            Some(')') => Some(self.token(TokenKind::ParenClose)),
+            Some('{') => Some(self.token(TokenKind::BracketOpen)),
+            Some('}') => Some(self.token(TokenKind::BracketClose)),
+            Some('[') => Some(self.token(TokenKind::SqBracketOpen)),
+            Some(']') => Some(self.token(TokenKind::SqBracketClose)),
+            Some(',') => Some(self.token(TokenKind::Comma)),
+            Some(';') => Some(self.token(TokenKind::Semicolon)),
 
-        let token = match self.curr_char {
-            '(' => Some(self.token(TokenKind::ParenOpen)),
-            ')' => Some(self.token(TokenKind::ParenClose)),
-            '{' => Some(self.token(TokenKind::BracketOpen)),
-            '}' => Some(self.token(TokenKind::BracketClose)),
-            '[' => Some(self.token(TokenKind::SqBracketOpen)),
-            ']' => Some(self.token(TokenKind::SqBracketClose)),
-            ',' => Some(self.token(TokenKind::Comma)),
-            ';' => Some(self.token(TokenKind::Semicolon)),
+            Some('&') => Some(self.token(TokenKind::And)),
+            Some('|') => Some(self.token(TokenKind::Or)),
 
-            '&' => Some(self.token(TokenKind::And)),
-            '|' => Some(self.token(TokenKind::Or)),
-
-            '.' => match self.next_char() {
+            Some('.') => match self.check_and_consume(".") {
                 Some('.') => Some(self.token(TokenKind::Range)),
-                _ => {
-                    needs_to_read_next = false;
-                    Some(self.token(TokenKind::Dot))
-                }
+                _ => Some(self.token(TokenKind::Dot)),
             },
 
-            '+' | '-' | '*' | '/' | '%' | '<' | '>' | '!' | '=' => {
-                let first_char = self.curr_char;
-
-                match self.next_char() {
+            Some(first_char) if "+-*/%<>!=".contains(first_char) => {
+                match self.check_and_consume(OPERATOR_CHARS) {
                     Some('/') if first_char == '/' => self.try_build_comment(),
                     Some('>') if first_char == '-' => Some(self.token(TokenKind::ThinArrow)),
                     Some('=') => match first_char {
@@ -120,38 +122,27 @@ impl LexerImpl {
                         '=' => Some(self.token(TokenKind::Equal)),
                         _ => unreachable!(),
                     },
-                    Some(c) if OPERATOR_CHARS.contains(&c) => ErrorHandler::handle_error(
-                        FatalError::UnexpectedCharacter(c, self.curr_pos),
-                    ),
-                    _ => {
-                        needs_to_read_next = false;
-                        match first_char {
-                            '+' => Some(self.token(TokenKind::Plus)),
-                            '-' => Some(self.token(TokenKind::Minus)),
-                            '*' => Some(self.token(TokenKind::Multiply)),
-                            '/' => Some(self.token(TokenKind::Divide)),
-                            '%' => Some(self.token(TokenKind::Modulo)),
-                            '<' => Some(self.token(TokenKind::LessThan)),
-                            '>' => Some(self.token(TokenKind::GreaterThan)),
-                            '!' => Some(self.token(TokenKind::Not)),
-                            '=' => Some(self.token(TokenKind::Assign)),
-                            _ => unreachable!(),
-                        }
-                    }
+                    Some(c) => ErrorHandler::handle_error(FatalError::UnexpectedCharacter(
+                        c,
+                        self.curr_pos,
+                    )),
+                    _ => match first_char {
+                        '+' => Some(self.token(TokenKind::Plus)),
+                        '-' => Some(self.token(TokenKind::Minus)),
+                        '*' => Some(self.token(TokenKind::Multiply)),
+                        '/' => Some(self.token(TokenKind::Divide)),
+                        '%' => Some(self.token(TokenKind::Modulo)),
+                        '<' => Some(self.token(TokenKind::LessThan)),
+                        '>' => Some(self.token(TokenKind::GreaterThan)),
+                        '!' => Some(self.token(TokenKind::Not)),
+                        '=' => Some(self.token(TokenKind::Assign)),
+                        _ => unreachable!(),
+                    },
                 }
             }
 
-            _ => {
-                needs_to_read_next = false;
-                None
-            }
-        };
-
-        if needs_to_read_next {
-            self.next_char();
+            _ => None,
         }
-
-        token
     }
 
     fn try_build_comment(&mut self) -> Option<Token> {
@@ -169,34 +160,35 @@ impl LexerImpl {
     fn try_build_identifier_or_keyword(&mut self) -> Option<Token> {
         let mut content = String::new();
 
-        if self.curr_char == '_' || self.curr_char.is_alphabetic() {
-            content.push(self.curr_char);
-            let mut char = self.next_char().unwrap_or(' ');
+        match self.curr_char {
+            Some(c) if c == '_' || c.is_alphabetic() => {
+                content.push(c);
+                let mut char = self.next_char().unwrap_or(' ');
 
-            while char == '_' || char.is_alphanumeric() {
-                content.push(char);
-                char = self.next_char().unwrap_or(' ');
-            }
+                while char == '_' || char.is_alphanumeric() {
+                    content.push(char);
+                    char = self.next_char().unwrap_or(' ');
+                }
 
-            match KEYWORDS.get(&content[..]) {
-                Some(kind) => Some(self.token(kind.clone())),
-                None => Some(self.token(TokenKind::Identifier(content))),
+                match KEYWORDS.get(&content[..]) {
+                    Some(kind) => Some(self.token(kind.clone())),
+                    None => Some(self.token(TokenKind::Identifier(content))),
+                }
             }
-        } else {
-            None
+            _ => None,
         }
     }
 
     fn try_build_string(&mut self) -> Option<Token> {
-        let token = match self.curr_char {
-            '"' => {
+        match self.curr_char {
+            Some('"') => {
                 let mut content = String::new();
-                let mut char = self.next_char_eof();
+                let mut char = self.next_char_ensure_no_eof();
 
-                loop {
+                while char != '"' {
                     match char {
                         '\\' => {
-                            let escape_char = self.next_char_eof();
+                            let escape_char = self.next_char_ensure_no_eof();
                             match escape_char {
                                 'n' => content.push('\n'),
                                 'r' => content.push('\r'),
@@ -210,66 +202,66 @@ impl LexerImpl {
                                 )),
                             }
                         }
-                        '"' => break,
                         _ => content.push(char),
                     }
 
-                    char = self.next_char_eof();
+                    char = self.next_char_ensure_no_eof();
                 }
 
+                self.next_char();
                 Some(self.token(TokenKind::String(content)))
             }
             _ => None,
-        };
-
-        if token.is_some() {
-            self.next_char();
         }
-
-        token
     }
 
     fn try_build_number(&mut self) -> Option<Token> {
-        let mut unsigned = 0u64;
-        let mut float = 0.0;
-        let mut is_float = false;
-        let mut float_counter = 1;
+        match self.curr_char {
+            Some(c) if c.is_ascii_digit() => {
+                let integer = self.build_integer();
 
-        if self.curr_char.is_ascii_digit() {
-            unsigned = unsigned * 10 + (self.curr_char as u64 - '0' as u64);
-        } else {
-            return None;
-        }
-
-        while self.next_char().is_some() {
-            if self.curr_char.is_ascii_digit() {
-                if !is_float {
-                    match unsigned
-                        .checked_mul(10)
-                        .and_then(|val| val.checked_add(self.curr_char as u64 - '0' as u64))
-                    {
-                        Some(val) => unsigned = val,
-                        None => ErrorHandler::handle_error(FatalError::LiteralOutOfBounds(
-                            self.curr_pos,
-                        )),
+                match self.curr_char {
+                    Some('.') => {
+                        self.next_char();
+                        let float = self.build_float(integer);
+                        Some(self.token(TokenKind::Number(NumberType::Float(float))))
                     }
-                } else {
-                    float +=
-                        (self.curr_char as u64 - '0' as u64) as f64 * (10f64).powi(-float_counter);
-                    float_counter += 1;
+                    Some(c) if c.is_alphabetic() => ErrorHandler::handle_error(
+                        FatalError::UnexpectedCharacter(c, *self.reader.borrow_pos()),
+                    ),
+                    _ => Some(self.token(TokenKind::Number(NumberType::Integer(integer)))),
                 }
-            } else if !is_float && self.curr_char == '.' {
-                float = unsigned as f64;
-                is_float = true;
-            } else {
-                break;
+            }
+            _ => None,
+        }
+    }
+
+    fn build_integer(&mut self) -> u64 {
+        let mut value = 0u64;
+
+        while let Some(c) = self.check_and_consume("0123456789") {
+            match value
+                .checked_mul(10)
+                .and_then(|new_val| new_val.checked_add(c as u64 - '0' as u64))
+            {
+                Some(new_val) => value = new_val,
+                None => ErrorHandler::handle_error(FatalError::LiteralOutOfBounds(self.curr_pos)),
             }
         }
 
-        match is_float {
-            true => Some(self.token(TokenKind::Number(NumberType::Float(float)))),
-            false => Some(self.token(TokenKind::Number(NumberType::Integer(unsigned)))),
+        value
+    }
+
+    fn build_float(&mut self, integer_part: u64) -> f64 {
+        let mut value = integer_part as f64;
+        let mut float_counter = 1;
+
+        while let Some(c) = self.check_and_consume("0123456789") {
+            value += (c as u64 - '0' as u64) as f64 * (10f64).powi(-float_counter);
+            float_counter += 1;
         }
+
+        value
     }
 }
 
@@ -277,7 +269,9 @@ impl Iterator for LexerImpl {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.ignore_whitespace().is_none() || self.reader.eof() {
+        self.ignore_whitespace();
+
+        if self.reader.eof() {
             self.curr_token = None;
             return None;
         }
@@ -292,10 +286,14 @@ impl Iterator for LexerImpl {
 
         match self.curr_token.clone() {
             Some(token) => Some(token),
-            None => ErrorHandler::handle_error(FatalError::UnexpectedCharacter(
-                self.curr_char,
-                self.curr_pos,
-            )),
+            None => match self.curr_char {
+                Some(c) => {
+                    ErrorHandler::handle_error(FatalError::UnexpectedCharacter(c, self.curr_pos))
+                }
+                _ => {
+                    ErrorHandler::handle_error(FatalError::UnexpectedEof(*self.reader.borrow_pos()))
+                }
+            },
         }
     }
 }

@@ -7,11 +7,13 @@ enum_def        ::= 'enum' identifier '{' (identifier '(' identifier ')' ',')* (
 struct_def      ::= 'struct' identifier '{' (identifier identifier ',')* (identifier identifier)? '}';
 function_def    ::= 'fn' identifier '(' (identifier identifier ',')* (identifier identifier)? ')' ('->' identifier)? block_expr;
 
-statement       ::= var_def | assignment_stmt | return_stmt | yield_stmt | for_stmt | while_stmt | (if_expr | match_expr | block_expr) ';';
+statement       ::= var_def | assignment_stmt | return_stmt | yield_stmt | break_stmt | continue_stmt | for_stmt | while_stmt | (if_expr | match_expr | block_expr) ';';
 while_stmt      ::= 'while' expression block_expr;
 for_stmt        ::= 'for' identifier identifier 'in' range block_expr;
 return_stmt     ::= 'return' expression ';';
 yield_stmt      ::= 'yield' expression ';';
+break_stmt      ::= 'break' ';';
+continue_stmt   ::= 'continue' ';';
 assignment_stmt ::= identifier assignment_op expression ';';
 
 block_expr  ::= '{' (statement | comment)* '}';
@@ -20,7 +22,7 @@ if_expr     ::= 'if' expression block_expr ('else' 'if' expression block_expr)* 
 
 match_arm    ::= pattern '->' expression;
 pattern      ::= pattern_part ('|' pattern_part)*;
-pattern_part ::= identifier ('(' pattern? ')')? | literal_range | literal
+pattern_part ::= identifier ('.' identifier ('(' pattern? ')')?)? | literal_range | literal
 
 range ::= value ('..' | '..=') value;
 literal_range ::= integer ('..' | '..=') integer;

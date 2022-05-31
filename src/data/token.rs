@@ -6,7 +6,7 @@ use utf8_read::StreamPosition;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum NumberType {
-    Integer(u64),
+    Integer(i64),
     Float(f64),
 }
 
@@ -64,21 +64,25 @@ pub enum TokenKind {
     ThinArrow,
 
     // Language constructs
+    Fn,
+    Struct,
+    Enum,
+    Const,
+    Let,
+    Mut,
+    In,
+    Range,
+
+    // Control flow constructs
     If,
     Else,
     Match,
     While,
     For,
-    In,
-    Fn,
     Return,
     Yield,
-    Struct,
-    Enum,
-    Let,
-    Mut,
-    Const,
-    Range,
+    Break,
+    Continue,
 
     // Keyword literals
     True,
@@ -128,8 +132,10 @@ pub fn try_get_keyword(keyword: &str) -> Option<TokenKind> {
         "as" => Some(TokenKind::As),
         "true" => Some(TokenKind::True),
         "false" => Some(TokenKind::False),
+        "break" => Some(TokenKind::Break),
+        "continue" => Some(TokenKind::Continue),
         _ => None,
     }
 }
 
-pub static OPERATOR_CHARS: &'static str = "+-*/%=!<>&|.";
+pub static OPERATOR_CHARS: &str = "+-*/%=!<>&|.";

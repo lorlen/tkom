@@ -1,20 +1,18 @@
 //! The parser module, that creates the program's parse tree from a stream
 //! of tokens
 
-pub(crate) mod nodes;
 mod tests;
 
 use std::mem::discriminant;
 
 use crate::{
-    error::{ErrorHandler, FatalError},
-    lexer::{
+    data::{
+        progtree::*,
         token::{NumberType, Token, TokenKind},
-        Lexer,
     },
+    error::{ErrorHandler, FatalError},
+    lexer::Lexer,
 };
-
-use self::nodes::*;
 
 pub struct Parser {
     lexer: Box<dyn Lexer>,
@@ -40,15 +38,33 @@ impl Parser {
             ]);
 
             if let Some(const_def) = self.parse_const_def() {
-                program.const_defs.push(const_def);
+                if program.const_defs.contains_key(&const_def.name) {
+                    ErrorHandler::handle_error(FatalError::DuplicateDeclaration(const_def.name));
+                }
+                program.const_defs.insert(const_def.name.clone(), const_def);
             }
 
             if let Some(type_def) = self.parse_type_def() {
-                program.type_defs.push(type_def);
+                let name = match type_def.clone() {
+                    TypeDef::StructDef(StructDef { name, .. }) => name,
+                    TypeDef::EnumDef(EnumDef { name, .. }) => name,
+                };
+
+                if program.type_defs.contains_key(&name) {
+                    ErrorHandler::handle_error(FatalError::DuplicateDeclaration(name));
+                }
+
+                program.type_defs.insert(name, type_def);
             }
 
             if let Some(function_def) = self.parse_function() {
-                program.function_defs.push(function_def);
+                if program.function_defs.contains_key(&function_def.name) {
+                    ErrorHandler::handle_error(FatalError::DuplicateDeclaration(function_def.name));
+                }
+
+                program
+                    .function_defs
+                    .insert(function_def.name.clone(), function_def);
             }
         }
 
@@ -358,7 +374,7 @@ impl Parser {
             FatalError::BlockExpected(*self.lexer.curr_pos()),
         );
         Some(IfBranch {
-            condition: Some(Box::new(condition)),
+            condition: Box::new(condition),
             block: Box::new(block),
         })
     }
@@ -373,7 +389,7 @@ impl Parser {
                 FatalError::BlockExpected(*self.lexer.curr_pos()),
             );
             Some(IfBranch {
-                condition: None,
+                condition: Box::new(Expression::Value(Value::Literal(Literal::Bool(true)))),
                 block: Box::new(block),
             })
         }
@@ -590,9 +606,9 @@ impl Parser {
                     path.push(self.required_identifier());
                 }
 
-                Some(Value::MemberAccess(path))
+                Some(Value::Identifier(path))
             }
-            _ => Some(Value::Identifier(ident)),
+            _ => Some(Value::Identifier(vec![ident])),
         }
     }
 
@@ -665,14 +681,27 @@ impl Parser {
                 Some(PatternPart::CatchAll)
             }
             TokenKind::Identifier(i) => {
-                let i2 = i.clone();
+                let enum_or_binding = i.clone();
                 self.next_token();
-                if self.check_and_consume(&[TokenKind::ParenOpen]).is_some() {
-                    let inner_pattern = self.parse_pattern();
-                    self.consume_or_error(&[TokenKind::ParenClose]);
-                    Some(PatternPart::EnumVariant(i2, inner_pattern))
+                if self.check_and_consume(&[TokenKind::Dot]).is_some() {
+                    let variant = self.required_identifier();
+
+                    let inner_pattern = if self.check_and_consume(&[TokenKind::ParenOpen]).is_some()
+                    {
+                        let inner_pattern = self.parse_pattern();
+                        self.consume_or_error(&[TokenKind::ParenClose]);
+                        inner_pattern
+                    } else {
+                        vec![]
+                    };
+
+                    Some(PatternPart::EnumVariant(
+                        enum_or_binding,
+                        variant,
+                        inner_pattern,
+                    ))
                 } else {
-                    Some(PatternPart::Binding(i2))
+                    Some(PatternPart::Binding(enum_or_binding))
                 }
             }
             _ => None,
@@ -712,6 +741,8 @@ impl Parser {
             .or_else(|| self.parse_match().map(Statement::Match))
             .or_else(|| self.parse_while())
             .or_else(|| self.parse_for())
+            .or_else(|| self.parse_break())
+            .or_else(|| self.parse_continue())
             .or_else(|| self.parse_yield())
             .or_else(|| self.parse_return())
     }
@@ -776,6 +807,18 @@ impl Parser {
         );
         self.consume_or_error(&[TokenKind::Semicolon]);
         Some(Statement::Yield(Box::new(expr)))
+    }
+
+    fn parse_break(&mut self) -> Option<Statement> {
+        self.check_and_consume(&[TokenKind::Break])?;
+        self.consume_or_error(&[TokenKind::Semicolon]);
+        Some(Statement::Break)
+    }
+
+    fn parse_continue(&mut self) -> Option<Statement> {
+        self.check_and_consume(&[TokenKind::Continue])?;
+        self.consume_or_error(&[TokenKind::Semicolon]);
+        Some(Statement::Continue)
     }
 
     fn parse_var_def(&mut self) -> Option<Statement> {

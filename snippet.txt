@@ -52,17 +52,17 @@ fn main() {
         var2 += 1;
     }
 
-    let SomeEnum var3 = new(EmptyVariant);
+    let SomeEnum var3 = new(SomeEnum.EmptyVariant);
 
     // match expression
     match var3 {
         // simple match
-        EmptyVariant() -> 1,
+        SomeEnum.EmptyVariant() -> 1,
 
         // match with variable binding
-        PrimitiveVariant(inner_val) -> inner_val,
+        SomeEnum.PrimitiveVariant(inner_val) -> inner_val,
 
-		StructVariant(str) -> {
+		SomeEnum.StructVariant(str) -> {
 			// block of code in an arm
 			println(str.field1);
 		}

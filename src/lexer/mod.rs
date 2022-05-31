@@ -9,15 +9,14 @@
 //!   of tokens, and cause a fatal error to be reported.
 
 mod tests;
-pub(crate) mod token;
 
 use std::io::Read;
 
 use utf8_read::{Char, Reader, StreamPosition};
 
 use crate::{
+    data::token::{try_get_keyword, NumberType, Token, TokenKind, OPERATOR_CHARS},
     error::{ErrorHandler, FatalError},
-    lexer::token::{try_get_keyword, NumberType, Token, TokenKind, OPERATOR_CHARS},
 };
 
 pub trait Lexer: Iterator<Item = Token> {
@@ -237,13 +236,13 @@ impl LexerImpl {
         }
     }
 
-    fn build_integer(&mut self) -> u64 {
-        let mut value = 0u64;
+    fn build_integer(&mut self) -> i64 {
+        let mut value = 0i64;
 
         while let Some(c) = self.check_and_consume("0123456789") {
             match value
                 .checked_mul(10)
-                .and_then(|new_val| new_val.checked_add(c as u64 - '0' as u64))
+                .and_then(|new_val| new_val.checked_add(c as i64 - '0' as i64))
             {
                 Some(new_val) => value = new_val,
                 None => ErrorHandler::handle_error(FatalError::LiteralOutOfBounds(self.curr_pos)),
@@ -253,7 +252,7 @@ impl LexerImpl {
         value
     }
 
-    fn build_float(&mut self, integer_part: u64) -> f64 {
+    fn build_float(&mut self, integer_part: i64) -> f64 {
         let mut value = integer_part as f64;
         let mut float_counter = 1;
 

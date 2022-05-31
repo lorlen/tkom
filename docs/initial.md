@@ -1,4 +1,4 @@
-# TKOM — Projekt
+# TKOM — Dokumentacja wstępna
 
 Filip Lew
 

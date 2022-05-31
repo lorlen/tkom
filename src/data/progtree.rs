@@ -1,6 +1,11 @@
 //! Program nodes, used to create the parse tree
 
-use crate::lexer::token::TokenKind;
+use std::{
+    collections::HashMap,
+    ops::{Div, Mul, Rem, Sub},
+};
+
+use crate::data::token::TokenKind;
 
 pub type Identifier = String;
 
@@ -8,9 +13,9 @@ pub type Identifier = String;
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Program {
-    pub type_defs: Vec<TypeDef>,
-    pub function_defs: Vec<Function>,
-    pub const_defs: Vec<ConstDef>,
+    pub type_defs: HashMap<Identifier, TypeDef>,
+    pub function_defs: HashMap<Identifier, Function>,
+    pub const_defs: HashMap<Identifier, ConstDef>,
 }
 
 // ========== Definitions ==========
@@ -86,7 +91,7 @@ pub struct If {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfBranch {
-    pub condition: Option<Box<Expression>>,
+    pub condition: Box<Expression>,
     pub block: Box<BlockExpr>,
 }
 
@@ -104,9 +109,8 @@ pub enum Expression {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Literal(Literal),
-    Identifier(Identifier),
+    Identifier(Vec<Identifier>),
     FunctionCall(FunctionCall),
-    MemberAccess(Vec<Identifier>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -119,7 +123,7 @@ pub struct FunctionCall {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
-    Integer(u64),
+    Integer(i64),
     Float(f64),
     Bool(bool),
     String(String),
@@ -156,6 +160,47 @@ pub enum Operator {
     MultiplyAssign,
     DivideAssign,
     ModuloAssign,
+}
+
+impl Operator {
+    pub fn try_get_arithmetic_operation<T>(&self) -> Option<fn(T, T) -> T>
+    where
+        T: Copy + Sub<Output = T> + Mul<Output = T> + Div<Output = T> + Rem<Output = T>,
+    {
+        match self {
+            Self::Minus => Some(Sub::sub),
+            Self::Multiply => Some(Mul::mul),
+            Self::Divide => Some(Div::div),
+            Self::Modulo => Some(Rem::rem),
+            _ => None,
+        }
+    }
+
+    pub fn try_get_relational_operation<T>(&self) -> Option<fn(&T, &T) -> bool>
+    where
+        T: PartialEq + PartialOrd,
+    {
+        match self {
+            Self::GreaterThan => Some(PartialOrd::gt),
+            Self::LessThan => Some(PartialOrd::lt),
+            Self::GreaterEqual => Some(PartialOrd::ge),
+            Self::LessEqual => Some(PartialOrd::le),
+            Self::Equal => Some(PartialEq::eq),
+            Self::NotEqual => Some(PartialEq::ne),
+            _ => None,
+        }
+    }
+
+    pub fn try_remove_assign(&self) -> Option<Self> {
+        match self {
+            Self::PlusAssign => Some(Self::Plus),
+            Self::MinusAssign => Some(Self::Minus),
+            Self::MultiplyAssign => Some(Self::Multiply),
+            Self::DivideAssign => Some(Self::Divide),
+            Self::ModuloAssign => Some(Self::Modulo),
+            _ => None,
+        }
+    }
 }
 
 impl TryFrom<TokenKind> for Operator {
@@ -196,7 +241,7 @@ pub struct MatchArm {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PatternPart {
-    EnumVariant(Identifier, Vec<PatternPart>),
+    EnumVariant(Identifier, Identifier, Vec<PatternPart>),
     Literal(LiteralOrRange),
     Binding(Identifier),
     CatchAll,
@@ -258,7 +303,9 @@ pub enum Statement {
     For(For),
     VarDef(VarDef),
     Assignment(Assignment),
+    FunctionCall(FunctionCall),
     Return(Option<Box<Expression>>),
     Yield(Box<Expression>),
-    FunctionCall(FunctionCall),
+    Break,
+    Continue,
 }

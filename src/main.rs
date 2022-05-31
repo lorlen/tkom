@@ -1,20 +1,29 @@
 #![forbid(unsafe_code)]
 
+mod data;
 mod error;
 mod lexer;
 mod parser;
+mod stdlib;
+mod visitors;
 
 use std::{
     fs::File,
     io::{self, Read},
     path::PathBuf,
+    process,
 };
 
 use clap::Parser as ArgParser;
-use error::{ErrorHandler, FatalError};
 use utf8_read::Reader;
 
-use crate::{lexer::LexerImpl, parser::Parser};
+use crate::{
+    data::runtime::RuntimeValue,
+    error::{ErrorHandler, FatalError},
+    lexer::LexerImpl,
+    parser::Parser,
+    visitors::{executor::Executor, Visitor},
+};
 
 /// An interpreter for a small, Rust-inspired language
 #[derive(ArgParser)]
@@ -44,5 +53,7 @@ fn main() {
     let mut parser = Parser::new(Box::new(lexer));
     let program = parser.parse();
 
-    println!("{:#?}", program);
+    if let Some(RuntimeValue::Integer(i)) = Executor::default().visit_program(&program) {
+        process::exit(i32::try_from(i).unwrap_or(i32::MAX))
+    }
 }

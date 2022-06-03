@@ -23,17 +23,17 @@ enum SomeEnum {
 // main - entry point, required
 fn main() {
     // immutable variable
-    u64 var1 = 1;
+    let u64 var1 = 1;
 
     // mutable variable
-    mut u64 var2 = 1;
+    let mut u64 var2 = 1;
 
     // if expression
-    string var3 = if var1 == 1 {
-        "var1 is 1"
+    let string var3 = if var1 == 1 {
+        yield "var1 is 1";
     } else {
-        "var1 is something else"
-    }
+        yield "var1 is something else";
+    };
 
     // for loop
     for u64 i in 0 .. 10 {
@@ -52,26 +52,26 @@ fn main() {
         var2 += 1;
     }
 
-    SomeEnum var3 = EmptyVariant;
+    let SomeEnum var3 = new(EmptyVariant);
 
     // match expression
     match var3 {
         // simple match
-        EmptyVariant => 1,
+        EmptyVariant() -> 1,
 
         // match with variable binding
-        PrimitiveVariant(inner_val) => inner_val,
+        PrimitiveVariant(inner_val) -> inner_val,
 
-		StructVariant(str) => {
+		StructVariant(str) -> {
 			// block of code in an arm
 			println(str.field1);
 		}
     }
     
     match var1 {
-    	1 | 2 => "1 or 2",
-    	3 ..= 5 => "from 3 to 5, inclusive",
-    	_ => "all the rest",
+    	1 | 2 -> "1 or 2",
+    	3 ..= 5 -> "from 3 to 5, inclusive",
+    	_ -> "all the rest",
     }
     
     // math expression

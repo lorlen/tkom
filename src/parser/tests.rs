@@ -57,7 +57,6 @@ parser_test!(
             Function {
                 name: "main".to_string(),
                 parameters: vec![],
-                return_type: None,
                 block: Box::new(BlockExpr { statements: vec![] })
             }
         )])
@@ -67,7 +66,7 @@ parser_test!(
 parser_test!(
     string,
     test_function_return,
-    "fn test() -> int { return 1; }",
+    "fn test() { return 1; }",
     Program {
         type_defs: HashMap::new(),
         const_defs: HashMap::new(),
@@ -76,7 +75,6 @@ parser_test!(
             Function {
                 name: "test".to_string(),
                 parameters: vec![],
-                return_type: Some("int".to_string()),
                 block: Box::new(BlockExpr {
                     statements: vec![Statement::Return(Some(Box::new(Expression::Value(
                         Value::Literal(Literal::Integer(1))
@@ -105,7 +103,6 @@ parser_test!(
             Function {
                 name: "test".to_string(),
                 parameters: vec![],
-                return_type: None,
                 block: Box::new(BlockExpr {
                     statements: vec![Statement::Match(Match {
                         expr: Box::new(Expression::Value(Value::Identifier(vec!["a".to_string()]))),
@@ -183,7 +180,7 @@ parser_test!(
 parser_test!(
     string,
     test_elseif,
-    "fn test(int i) { if i == 1 {} else if i == 2 {} else {} }",
+    "fn test(i) { if i == 1 {} else if i == 2 {} else {} }",
     Program {
         type_defs: HashMap::new(),
         const_defs: HashMap::new(),
@@ -191,29 +188,32 @@ parser_test!(
             "test".to_string(),
             Function {
                 name: "test".to_string(),
-                parameters: vec![("int".to_string(), "i".to_string())],
-                return_type: None,
+                parameters: vec!["i".to_string()],
                 block: Box::new(BlockExpr {
                     statements: vec![Statement::If(If {
                         branches: vec![
                             IfBranch {
-                                condition: Box::new(Expression::Binary(BinaryExpr {
-                                    ops: vec![Operator::Equal],
-                                    subexprs: vec![
-                                        Expression::Value(Value::Identifier(vec!["i".to_string()])),
-                                        Expression::Value(Value::Literal(Literal::Integer(1)))
-                                    ]
-                                })),
+                                condition: Box::new(Expression::Binary(BinaryExpr::Rel(RelExpr {
+                                    op: RelOperator::Equal,
+                                    left: Box::new(Expression::Value(Value::Identifier(vec![
+                                        "i".to_string()
+                                    ]))),
+                                    right: Box::new(Expression::Value(Value::Literal(
+                                        Literal::Integer(1)
+                                    )))
+                                }))),
                                 block: Box::new(BlockExpr { statements: vec![] })
                             },
                             IfBranch {
-                                condition: Box::new(Expression::Binary(BinaryExpr {
-                                    ops: vec![Operator::Equal],
-                                    subexprs: vec![
-                                        Expression::Value(Value::Identifier(vec!["i".to_string()])),
-                                        Expression::Value(Value::Literal(Literal::Integer(2)))
-                                    ]
-                                })),
+                                condition: Box::new(Expression::Binary(BinaryExpr::Rel(RelExpr {
+                                    op: RelOperator::Equal,
+                                    left: Box::new(Expression::Value(Value::Identifier(vec![
+                                        "i".to_string()
+                                    ]))),
+                                    right: Box::new(Expression::Value(Value::Literal(
+                                        Literal::Integer(2)
+                                    )))
+                                }))),
                                 block: Box::new(BlockExpr { statements: vec![] })
                             },
                             IfBranch {
@@ -241,84 +241,70 @@ parser_test!(
             Function {
                 name: "test".to_string(),
                 parameters: vec![],
-                return_type: None,
                 block: Box::new(BlockExpr {
                     statements: vec![Statement::Return(Some(Box::new(Expression::Binary(
-                        BinaryExpr {
-                            ops: vec![Operator::And],
+                        BinaryExpr::And(AndExpr {
                             subexprs: vec![
-                                Expression::Binary(BinaryExpr {
-                                    ops: vec![Operator::LessThan],
-                                    subexprs: vec![
-                                        Expression::Binary(BinaryExpr {
-                                            ops: vec![Operator::Plus, Operator::Minus],
-                                            subexprs: vec![
-                                                Expression::Value(Value::Literal(
-                                                    Literal::Integer(1)
+                                Expression::Binary(BinaryExpr::Rel(RelExpr {
+                                    op: RelOperator::LessThan,
+                                    left: Box::new(Expression::Binary(BinaryExpr::Add(AddExpr {
+                                        ops: vec![AddOperator::Plus, AddOperator::Minus],
+                                        subexprs: vec![
+                                            Expression::Value(Value::Literal(Literal::Integer(1))),
+                                            Expression::Value(Value::Literal(Literal::Integer(2))),
+                                            Expression::Value(Value::Literal(Literal::Integer(3))),
+                                        ],
+                                    }))),
+                                    right: Box::new(Expression::Binary(BinaryExpr::Mul(MulExpr {
+                                        ops: vec![MulOperator::Multiply],
+                                        subexprs: vec![
+                                            Expression::Value(Value::Literal(Literal::Integer(2))),
+                                            Expression::Neg(NegExpr {
+                                                subexpr: Box::new(Expression::Value(
+                                                    Value::Literal(Literal::Integer(2))
                                                 )),
-                                                Expression::Value(Value::Literal(
-                                                    Literal::Integer(2)
-                                                )),
-                                                Expression::Value(Value::Literal(
-                                                    Literal::Integer(3)
-                                                )),
-                                            ],
-                                        }),
-                                        Expression::Binary(BinaryExpr {
-                                            ops: vec![Operator::Multiply],
-                                            subexprs: vec![
-                                                Expression::Value(Value::Literal(
-                                                    Literal::Integer(2)
-                                                )),
-                                                Expression::Unary(UnaryExpr {
-                                                    ops: vec![Operator::Minus],
-                                                    subexpr: Box::new(Expression::Value(
-                                                        Value::Literal(Literal::Integer(2))
-                                                    )),
-                                                }),
-                                            ],
-                                        }),
-                                    ],
-                                }),
-                                Expression::Binary(BinaryExpr {
-                                    ops: vec![Operator::Equal],
-                                    subexprs: vec![
-                                        Expression::Value(Value::FunctionCall(FunctionCall {
+                                            }),
+                                        ],
+                                    }))),
+                                })),
+                                Expression::Binary(BinaryExpr::Rel(RelExpr {
+                                    op: RelOperator::Equal,
+                                    left: Box::new(Expression::Value(Value::FunctionCall(
+                                        FunctionCall {
                                             name: "call".to_string(),
                                             arguments: vec![],
-                                        })),
-                                        Expression::Binary(BinaryExpr {
-                                            ops: vec![Operator::Multiply],
-                                            subexprs: vec![
-                                                Expression::Binary(BinaryExpr {
-                                                    ops: vec![Operator::Plus],
-                                                    subexprs: vec![
-                                                        Expression::Value(Value::Literal(
-                                                            Literal::Integer(1)
-                                                        )),
-                                                        Expression::Value(Value::Literal(
-                                                            Literal::Integer(2)
-                                                        )),
-                                                    ],
-                                                }),
-                                                Expression::As(AsExpr {
-                                                    expr: Box::new(Expression::Value(
-                                                        Value::Literal(Literal::Integer(3))
+                                        }
+                                    ))),
+                                    right: Box::new(Expression::Binary(BinaryExpr::Mul(MulExpr {
+                                        ops: vec![MulOperator::Multiply],
+                                        subexprs: vec![
+                                            Expression::Binary(BinaryExpr::Add(AddExpr {
+                                                ops: vec![AddOperator::Plus],
+                                                subexprs: vec![
+                                                    Expression::Value(Value::Literal(
+                                                        Literal::Integer(1)
                                                     )),
-                                                    cast_type: "int".to_string(),
-                                                }),
-                                            ],
-                                        }),
-                                    ],
-                                }),
-                                Expression::Unary(UnaryExpr {
-                                    ops: vec![Operator::Not],
+                                                    Expression::Value(Value::Literal(
+                                                        Literal::Integer(2)
+                                                    )),
+                                                ],
+                                            })),
+                                            Expression::As(AsExpr {
+                                                expr: Box::new(Expression::Value(Value::Literal(
+                                                    Literal::Integer(3)
+                                                ))),
+                                                cast_type: "int".to_string(),
+                                            }),
+                                        ],
+                                    }))),
+                                })),
+                                Expression::Not(NotExpr {
                                     subexpr: Box::new(Expression::Value(Value::Literal(
                                         Literal::Bool(false)
                                     ))),
                                 }),
                             ],
-                        }
+                        })
                     ))))],
                 }),
             }
@@ -362,39 +348,32 @@ parser_test!(
             Function {
                 name: "main".to_string(),
                 parameters: vec![],
-                return_type: None,
                 block: Box::new(BlockExpr {
                     statements: vec![
                         Statement::VarDef(VarDef {
-                            mutable: false,
                             name: "var1".to_string(),
-                            type_: "u64".to_string(),
                             expr: Box::new(Expression::Value(Value::Literal(Literal::Integer(1)))),
                         }),
                         Statement::VarDef(VarDef {
-                            mutable: true,
                             name: "var2".to_string(),
-                            type_: "u64".to_string(),
                             expr: Box::new(Expression::Value(Value::Literal(Literal::Integer(1)))),
                         }),
                         Statement::VarDef(VarDef {
-                            mutable: false,
                             name: "var3".to_string(),
-                            type_: "string".to_string(),
                             expr: Box::new(Expression::If(If {
                                 branches: vec![
                                     IfBranch {
-                                        condition: Box::new(Expression::Binary(BinaryExpr {
-                                            ops: vec![Operator::Equal],
-                                            subexprs: vec![
-                                                Expression::Value(Value::Identifier(vec![
-                                                    "var1".to_string()
-                                                ])),
-                                                Expression::Value(Value::Literal(
-                                                    Literal::Integer(1)
+                                        condition: Box::new(Expression::Binary(BinaryExpr::Rel(
+                                            RelExpr {
+                                                op: RelOperator::Equal,
+                                                left: Box::new(Expression::Value(
+                                                    Value::Identifier(vec!["var1".to_string()])
                                                 )),
-                                            ],
-                                        })),
+                                                right: Box::new(Expression::Value(Value::Literal(
+                                                    Literal::Integer(1)
+                                                ))),
+                                            }
+                                        ))),
                                         block: Box::new(BlockExpr {
                                             statements: vec![Statement::Yield(Box::new(
                                                 Expression::Value(Value::Literal(Literal::String(
@@ -420,7 +399,6 @@ parser_test!(
                         }),
                         Statement::For(For {
                             var_name: "i".to_string(),
-                            var_type: "u64".to_string(),
                             range: Range {
                                 lower: Box::new(Expression::Value(Value::Literal(
                                     Literal::Integer(0)
@@ -449,7 +427,6 @@ parser_test!(
                         }),
                         Statement::For(For {
                             var_name: "i".to_string(),
-                            var_type: "u64".to_string(),
                             range: Range {
                                 lower: Box::new(Expression::Value(Value::Literal(
                                     Literal::Integer(0)
@@ -477,17 +454,19 @@ parser_test!(
                             }),
                         }),
                         Statement::While(While {
-                            condition: Box::new(Expression::Binary(BinaryExpr {
-                                ops: vec![Operator::LessThan],
-                                subexprs: vec![
-                                    Expression::Value(Value::Identifier(vec!["var2".to_string()])),
-                                    Expression::Value(Value::Literal(Literal::Integer(10)))
-                                ],
-                            })),
+                            condition: Box::new(Expression::Binary(BinaryExpr::Rel(RelExpr {
+                                op: RelOperator::LessThan,
+                                left: Box::new(Expression::Value(Value::Identifier(vec![
+                                    "var2".to_string()
+                                ]))),
+                                right: Box::new(Expression::Value(Value::Literal(
+                                    Literal::Integer(10)
+                                )))
+                            }))),
                             block: Box::new(BlockExpr {
                                 statements: vec![Statement::Assignment(Assignment {
-                                    name: "var2".to_string(),
-                                    op: Operator::PlusAssign,
+                                    path: vec!["var2".to_string()],
+                                    op: AssignOperator::PlusAssign,
                                     expr: Box::new(Expression::Value(Value::Literal(
                                         Literal::Integer(1)
                                     ))),
@@ -495,9 +474,7 @@ parser_test!(
                             }),
                         }),
                         Statement::VarDef(VarDef {
-                            mutable: false,
                             name: "var3".to_string(),
-                            type_: "SomeEnum".to_string(),
                             expr: Box::new(Expression::Value(Value::FunctionCall(FunctionCall {
                                 name: "new".to_string(),
                                 arguments: vec![Expression::Value(Value::Identifier(vec![
@@ -586,20 +563,19 @@ parser_test!(
                         }),
                         Statement::FunctionCall(FunctionCall {
                             name: "println".to_string(),
-                            arguments: vec![Expression::Binary(BinaryExpr {
-                                ops: vec![Operator::And],
+                            arguments: vec![Expression::Binary(BinaryExpr::And(AndExpr {
                                 subexprs: vec![
-                                    Expression::Binary(BinaryExpr {
-                                        ops: vec![Operator::Equal],
-                                        subexprs: vec![
-                                            Expression::Binary(BinaryExpr {
-                                                ops: vec![Operator::Plus],
+                                    Expression::Binary(BinaryExpr::Rel(RelExpr {
+                                        op: RelOperator::Equal,
+                                        left: Box::new(Expression::Binary(BinaryExpr::Add(
+                                            AddExpr {
+                                                ops: vec![AddOperator::Plus],
                                                 subexprs: vec![
                                                     Expression::Value(Value::Literal(
                                                         Literal::Integer(2)
                                                     )),
-                                                    Expression::Binary(BinaryExpr {
-                                                        ops: vec![Operator::Multiply],
+                                                    Expression::Binary(BinaryExpr::Mul(MulExpr {
+                                                        ops: vec![MulOperator::Multiply],
                                                         subexprs: vec![
                                                             Expression::Value(Value::Literal(
                                                                 Literal::Integer(2)
@@ -608,23 +584,25 @@ parser_test!(
                                                                 Literal::Integer(2)
                                                             )),
                                                         ],
-                                                    }),
+                                                    })),
                                                 ],
-                                            }),
-                                            Expression::Value(Value::Literal(Literal::Integer(6))),
-                                        ],
-                                    }),
-                                    Expression::Binary(BinaryExpr {
-                                        ops: vec![Operator::Equal],
-                                        subexprs: vec![
-                                            Expression::Binary(BinaryExpr {
-                                                ops: vec![Operator::Minus],
+                                            }
+                                        ))),
+                                        right: Box::new(Expression::Value(Value::Literal(
+                                            Literal::Integer(6)
+                                        ))),
+                                    })),
+                                    Expression::Binary(BinaryExpr::Rel(RelExpr {
+                                        op: RelOperator::Equal,
+                                        left: Box::new(Expression::Binary(BinaryExpr::Add(
+                                            AddExpr {
+                                                ops: vec![AddOperator::Minus],
                                                 subexprs: vec![
                                                     Expression::Value(Value::Literal(
                                                         Literal::Integer(5)
                                                     )),
-                                                    Expression::Binary(BinaryExpr {
-                                                        ops: vec![Operator::Divide],
+                                                    Expression::Binary(BinaryExpr::Mul(MulExpr {
+                                                        ops: vec![MulOperator::Divide],
                                                         subexprs: vec![
                                                             Expression::Value(Value::Literal(
                                                                 Literal::Integer(4)
@@ -633,14 +611,16 @@ parser_test!(
                                                                 Literal::Integer(2)
                                                             )),
                                                         ],
-                                                    }),
+                                                    })),
                                                 ],
-                                            }),
-                                            Expression::Value(Value::Literal(Literal::Integer(3))),
-                                        ],
-                                    }),
+                                            }
+                                        ))),
+                                        right: Box::new(Expression::Value(Value::Literal(
+                                            Literal::Integer(3)
+                                        ))),
+                                    })),
                                 ],
-                            })],
+                            }))],
                         }),
                     ],
                 }),
@@ -650,7 +630,6 @@ parser_test!(
             "SOME_CONSTANT".to_string(),
             ConstDef {
                 name: "SOME_CONSTANT".to_string(),
-                type_: "u64".to_string(),
                 value: Box::new(Expression::Value(Value::Literal(Literal::Integer(1)))),
             }
         )]),

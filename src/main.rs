@@ -53,7 +53,7 @@ fn main() {
     let mut parser = Parser::new(Box::new(lexer));
     let program = parser.parse();
 
-    if let Some(RuntimeValue::Integer(i)) = Executor::default().visit_program(&program) {
+    if let RuntimeValue::Integer(i) = Executor::default().visit_program(&program) {
         process::exit(i32::try_from(i).unwrap_or(i32::MAX))
     }
 }

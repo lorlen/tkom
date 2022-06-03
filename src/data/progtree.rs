@@ -1,13 +1,45 @@
 //! Program nodes, used to create the parse tree
 
-use std::{
-    collections::HashMap,
-    ops::{Div, Mul, Rem, Sub},
-};
+use std::{collections::HashMap, fmt::Display};
 
 use crate::data::token::TokenKind;
 
 pub type Identifier = String;
+
+// ========== Syntax parts ==========
+
+#[derive(Copy, Clone, PartialEq)]
+pub enum Syntax {
+    Block,
+    Expression,
+    MatchArm,
+    Range,
+    NumberLiteral,
+    FunctionCall,
+    Assignment,
+    TypeDef,
+    ConstDef,
+    Function,
+    Identifier,
+}
+
+impl Display for Syntax {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Syntax::Block => write!(f, "block"),
+            Syntax::Expression => write!(f, "expression"),
+            Syntax::MatchArm => write!(f, "match arm"),
+            Syntax::Range => write!(f, "range"),
+            Syntax::NumberLiteral => write!(f, "number literal"),
+            Syntax::FunctionCall => write!(f, "function call"),
+            Syntax::Assignment => write!(f, "assignment"),
+            Syntax::TypeDef => write!(f, "type definition"),
+            Syntax::ConstDef => write!(f, "const definition"),
+            Syntax::Function => write!(f, "function"),
+            Syntax::Identifier => write!(f, "identifier"),
+        }
+    }
+}
 
 // ========== Program ==========
 
@@ -41,29 +73,63 @@ pub enum TypeDef {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConstDef {
     pub name: Identifier,
-    pub type_: Identifier,
     pub value: Box<Expression>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub name: Identifier,
-    pub parameters: Vec<(Identifier, Identifier)>,
-    pub return_type: Option<Identifier>,
+    pub parameters: Vec<Identifier>,
     pub block: Box<BlockExpr>,
 }
 
 // ========== Expressions ==========
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct BinaryExpr {
-    pub ops: Vec<Operator>,
+pub enum BinaryExpr {
+    Add(AddExpr),
+    Mul(MulExpr),
+    Rel(RelExpr),
+    And(AndExpr),
+    Or(OrExpr),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AddExpr {
+    pub ops: Vec<AddOperator>,
     pub subexprs: Vec<Expression>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct UnaryExpr {
-    pub ops: Vec<Operator>,
+pub struct MulExpr {
+    pub ops: Vec<MulOperator>,
+    pub subexprs: Vec<Expression>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RelExpr {
+    pub op: RelOperator,
+    pub left: Box<Expression>,
+    pub right: Box<Expression>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AndExpr {
+    pub subexprs: Vec<Expression>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct OrExpr {
+    pub subexprs: Vec<Expression>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct NotExpr {
+    pub subexpr: Box<Expression>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct NegExpr {
     pub subexpr: Box<Expression>,
 }
 
@@ -98,7 +164,8 @@ pub struct IfBranch {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     Binary(BinaryExpr),
-    Unary(UnaryExpr),
+    Not(NotExpr),
+    Neg(NegExpr),
     As(AsExpr),
     Value(Value),
     If(If),
@@ -127,33 +194,36 @@ pub enum Literal {
     Float(f64),
     Bool(bool),
     String(String),
+    None,
 }
 
 // ========== Expression parts ==========
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Operator {
-    // Arithmetic operators
+pub enum AddOperator {
     Plus,
     Minus,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum MulOperator {
     Multiply,
     Divide,
     Modulo,
+}
 
-    // Relational operators
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum RelOperator {
     GreaterThan,
     LessThan,
     GreaterEqual,
     LessEqual,
     Equal,
     NotEqual,
+}
 
-    // Boolean operators
-    And,
-    Or,
-    Not,
-
-    // Assignment operators
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum AssignOperator {
     Assign,
     PlusAssign,
     MinusAssign,
@@ -162,72 +232,101 @@ pub enum Operator {
     ModuloAssign,
 }
 
-impl Operator {
-    pub fn try_get_arithmetic_operation<T>(&self) -> Option<fn(T, T) -> T>
-    where
-        T: Copy + Sub<Output = T> + Mul<Output = T> + Div<Output = T> + Rem<Output = T>,
-    {
-        match self {
-            Self::Minus => Some(Sub::sub),
-            Self::Multiply => Some(Mul::mul),
-            Self::Divide => Some(Div::div),
-            Self::Modulo => Some(Rem::rem),
-            _ => None,
-        }
-    }
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum UnaryOperator {
+    Not,
+    Minus,
+}
 
-    pub fn try_get_relational_operation<T>(&self) -> Option<fn(&T, &T) -> bool>
-    where
-        T: PartialEq + PartialOrd,
-    {
-        match self {
-            Self::GreaterThan => Some(PartialOrd::gt),
-            Self::LessThan => Some(PartialOrd::lt),
-            Self::GreaterEqual => Some(PartialOrd::ge),
-            Self::LessEqual => Some(PartialOrd::le),
-            Self::Equal => Some(PartialEq::eq),
-            Self::NotEqual => Some(PartialEq::ne),
-            _ => None,
-        }
-    }
+impl TryFrom<Option<&TokenKind>> for AddOperator {
+    type Error = ();
 
-    pub fn try_remove_assign(&self) -> Option<Self> {
-        match self {
-            Self::PlusAssign => Some(Self::Plus),
-            Self::MinusAssign => Some(Self::Minus),
-            Self::MultiplyAssign => Some(Self::Multiply),
-            Self::DivideAssign => Some(Self::Divide),
-            Self::ModuloAssign => Some(Self::Modulo),
-            _ => None,
+    fn try_from(value: Option<&TokenKind>) -> Result<Self, Self::Error> {
+        match value {
+            Some(TokenKind::Plus) => Ok(AddOperator::Plus),
+            Some(TokenKind::Minus) => Ok(AddOperator::Minus),
+            _ => Err(()),
         }
     }
 }
 
-impl TryFrom<TokenKind> for Operator {
+impl TryFrom<AssignOperator> for AddOperator {
     type Error = ();
 
-    fn try_from(value: TokenKind) -> Result<Self, Self::Error> {
+    fn try_from(value: AssignOperator) -> Result<Self, Self::Error> {
         match value {
-            TokenKind::Plus => Ok(Operator::Plus),
-            TokenKind::Minus => Ok(Operator::Minus),
-            TokenKind::Multiply => Ok(Operator::Multiply),
-            TokenKind::Divide => Ok(Operator::Divide),
-            TokenKind::Modulo => Ok(Operator::Modulo),
-            TokenKind::GreaterThan => Ok(Operator::GreaterThan),
-            TokenKind::LessThan => Ok(Operator::LessThan),
-            TokenKind::GreaterEqual => Ok(Operator::GreaterEqual),
-            TokenKind::LessEqual => Ok(Operator::LessEqual),
-            TokenKind::Equal => Ok(Operator::Equal),
-            TokenKind::NotEqual => Ok(Operator::NotEqual),
-            TokenKind::And => Ok(Operator::And),
-            TokenKind::Or => Ok(Operator::Or),
-            TokenKind::Not => Ok(Operator::Not),
-            TokenKind::Assign => Ok(Operator::Assign),
-            TokenKind::PlusAssign => Ok(Operator::PlusAssign),
-            TokenKind::MinusAssign => Ok(Operator::MinusAssign),
-            TokenKind::MultiplyAssign => Ok(Operator::MultiplyAssign),
-            TokenKind::DivideAssign => Ok(Operator::DivideAssign),
-            TokenKind::ModuloAssign => Ok(Operator::ModuloAssign),
+            AssignOperator::PlusAssign => Ok(AddOperator::Plus),
+            AssignOperator::MinusAssign => Ok(AddOperator::Minus),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Option<&TokenKind>> for MulOperator {
+    type Error = ();
+
+    fn try_from(value: Option<&TokenKind>) -> Result<Self, Self::Error> {
+        match value {
+            Some(TokenKind::Multiply) => Ok(MulOperator::Multiply),
+            Some(TokenKind::Divide) => Ok(MulOperator::Divide),
+            Some(TokenKind::Modulo) => Ok(MulOperator::Modulo),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<AssignOperator> for MulOperator {
+    type Error = ();
+
+    fn try_from(value: AssignOperator) -> Result<Self, Self::Error> {
+        match value {
+            AssignOperator::MultiplyAssign => Ok(MulOperator::Multiply),
+            AssignOperator::DivideAssign => Ok(MulOperator::Divide),
+            AssignOperator::ModuloAssign => Ok(MulOperator::Modulo),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Option<&TokenKind>> for RelOperator {
+    type Error = ();
+
+    fn try_from(value: Option<&TokenKind>) -> Result<Self, Self::Error> {
+        match value {
+            Some(TokenKind::GreaterThan) => Ok(RelOperator::GreaterThan),
+            Some(TokenKind::LessThan) => Ok(RelOperator::LessThan),
+            Some(TokenKind::GreaterEqual) => Ok(RelOperator::GreaterEqual),
+            Some(TokenKind::LessEqual) => Ok(RelOperator::LessEqual),
+            Some(TokenKind::Equal) => Ok(RelOperator::Equal),
+            Some(TokenKind::NotEqual) => Ok(RelOperator::NotEqual),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Option<&TokenKind>> for AssignOperator {
+    type Error = ();
+
+    fn try_from(value: Option<&TokenKind>) -> Result<Self, Self::Error> {
+        match value {
+            Some(TokenKind::Assign) => Ok(AssignOperator::Assign),
+            Some(TokenKind::PlusAssign) => Ok(AssignOperator::PlusAssign),
+            Some(TokenKind::MinusAssign) => Ok(AssignOperator::MinusAssign),
+            Some(TokenKind::MultiplyAssign) => Ok(AssignOperator::MultiplyAssign),
+            Some(TokenKind::DivideAssign) => Ok(AssignOperator::DivideAssign),
+            Some(TokenKind::ModuloAssign) => Ok(AssignOperator::ModuloAssign),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Option<&TokenKind>> for UnaryOperator {
+    type Error = ();
+
+    fn try_from(value: Option<&TokenKind>) -> Result<Self, Self::Error> {
+        match value {
+            Some(TokenKind::Not) => Ok(UnaryOperator::Not),
+            Some(TokenKind::Minus) => Ok(UnaryOperator::Minus),
             _ => Err(()),
         }
     }
@@ -275,23 +374,20 @@ pub struct While {
 #[derive(Clone, Debug, PartialEq)]
 pub struct For {
     pub var_name: Identifier,
-    pub var_type: Identifier,
     pub range: Range,
     pub block: Box<BlockExpr>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VarDef {
-    pub mutable: bool,
     pub name: Identifier,
-    pub type_: Identifier,
     pub expr: Box<Expression>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Assignment {
-    pub name: Identifier,
-    pub op: Operator,
+    pub path: Vec<Identifier>,
+    pub op: AssignOperator,
     pub expr: Box<Expression>,
 }
 

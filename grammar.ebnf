@@ -27,17 +27,17 @@ pattern_part ::= identifier ('.' identifier ('(' pattern? ')')?)? | literal_rang
 range ::= value ('..' | '..=') value;
 literal_range ::= integer ('..' | '..=') integer;
 
-value               ::= function_call | member_access | identifier | literal | '(' expression ')';
-expression          ::= or_expr | if_expr | match_expr | block_expr;
-or_expr             ::= and_expr (or_op and_expr)*;
-and_expr            ::= relational_expr (and_op relational_expr)*;
-relational_expr     ::= additive_expr ((relational_op | equality_op) additive_expr)*;
-additive_expr       ::= multiplicative_expr (additive_op multiplicative_expr)*;
-multiplicative_expr ::= as_expr (multiplicative_op as_expr)*;
-as_expr             ::= unary_expr ("as" identifier)?;
-unary_expr          ::= unary_op* value;
-member_access       ::= identifier '.' identifier;
-function_call       ::= identifier '(' (expression ',')* expression? ')';
+value                   ::= identifier (rest_of_member_access | rest_of_function_call)? | literal | '(' expression ')';
+expression              ::= or_expr | if_expr | match_expr | block_expr;
+or_expr                 ::= and_expr (or_op and_expr)*;
+and_expr                ::= relational_expr (and_op relational_expr)*;
+relational_expr         ::= additive_expr ((relational_op | equality_op) additive_expr)*;
+additive_expr           ::= multiplicative_expr (additive_op multiplicative_expr)*;
+multiplicative_expr     ::= as_expr (multiplicative_op as_expr)*;
+as_expr                 ::= unary_expr ("as" identifier)?;
+unary_expr              ::= unary_op* value;
+rest_of_member_access   ::= ('.' identifier)+;
+rest_of_function_call   ::= '(' (expression ',')* expression? ')';
 
 unary_op            ::= '!' | '-';
 or_op               ::= '|';

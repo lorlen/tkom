@@ -1,13 +1,17 @@
 //! Error handling module and error types
 
-use std::process;
+use std::{cmp::Ordering, process};
 
 use colored::Colorize;
 use utf8_read::StreamPosition;
 
-use crate::data::token::{Token, TokenKind};
+use crate::data::{
+    progtree::Syntax,
+    runtime::Declaration,
+    token::{Token, TokenKind},
+};
 
-pub enum FatalError<'a> {
+pub enum FatalError {
     // Reader errors
     IoError(String),
     MalformedUtf8(StreamPosition),
@@ -19,29 +23,24 @@ pub enum FatalError<'a> {
 
     // Parser errors
     UnexpectedToken(Token, TokenKind),
-    UnexpectedTokenMulti(Token, &'a [TokenKind]),
-    BlockExpected(StreamPosition),
-    ExprExpected(StreamPosition),
-    MatchArmExpected(StreamPosition),
-    RangeExpected(StreamPosition),
-    LiteralExpected(StreamPosition),
+    UnexpectedSyntax(Vec<Syntax>, Token),
 
     // Lexer/Parser errors
     UnexpectedEof(StreamPosition),
 
     // SemCheck errors
     DuplicateDeclaration(String),
-    NoMainFunction,
+    Undeclared(Declaration, String),
     NotInLoop,
-    MismatchedTypes(String, String),
+    MismatchedTypes(Vec<String>, String),
     InvalidCast(String, String),
     NonPrimitiveCast,
-    UndeclaredVariable(String),
     NonStructMemberAccess(String),
     NoSuchMember(String, String),
+    InvalidNumberOfArgs(usize, isize, usize),
 
     // Runtime errors
-    UserError(String, Vec<String>),
+    RuntimeError(String, Vec<String>),
     InexhaustiveMatch(Vec<String>),
 
     // Indicates a bug in the interpreter (should never happen!)
@@ -82,57 +81,50 @@ impl ErrorHandler {
                 pos.line_position().1
             ),
             FatalError::UnexpectedToken(token, kind) => format!(
-                "Expected {}, got {} instead [{}:{}]",
+                "Expected '{}', got '{}' instead [{}:{}]",
                 kind,
                 token.kind,
                 token.position.line_position().0,
                 token.position.line_position().1
             ),
-            FatalError::UnexpectedTokenMulti(token, kinds) => format!(
-                "Expected one of {}; got {} [{}:{}]",
-                kinds
-                    .iter()
-                    .map(|kind| format!("{}", kind))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                token.kind,
-                token.position.line_position().0,
-                token.position.line_position().1
-            ),
-            FatalError::BlockExpected(pos) => format!(
-                "Expected statement block [{}, {}]",
-                pos.line_position().0,
-                pos.line_position().1
-            ),
-            FatalError::ExprExpected(pos) => format!(
-                "Expected expression [{}, {}]",
-                pos.line_position().0,
-                pos.line_position().1
-            ),
-            FatalError::MatchArmExpected(pos) => format!(
-                "Expected match arm [{}, {}]",
-                pos.line_position().0,
-                pos.line_position().1
-            ),
-            FatalError::RangeExpected(pos) => format!(
-                "Expected range [{}, {}]",
-                pos.line_position().0,
-                pos.line_position().1
-            ),
-            FatalError::LiteralExpected(pos) => format!(
-                "Expected literal [{}, {}]",
-                pos.line_position().0,
-                pos.line_position().1
-            ),
+            FatalError::UnexpectedSyntax(syntax, token) => {
+                if syntax.len() == 1 {
+                    format!(
+                        "Expected {}, got '{}' [{}, {}]",
+                        syntax[0],
+                        token.kind,
+                        token.position.line_position().0,
+                        token.position.line_position().1
+                    )
+                } else {
+                    format!(
+                        "Expected one of: {}; got '{}' [{}, {}]",
+                        syntax
+                            .iter()
+                            .map(|e| format!("{}", e))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                        token.kind,
+                        token.position.line_position().0,
+                        token.position.line_position().1
+                    )
+                }
+            }
             FatalError::DuplicateDeclaration(name) => {
                 format!("Duplicate declaration of \"{}\"", name)
             }
-            FatalError::NoMainFunction => {
-                "A main() function is required to run the program".to_string()
-            }
+            FatalError::Undeclared(decl, name) => format!("Undeclared {} '{}'", decl, name),
             FatalError::NotInLoop => "A break or continue must be inside of a loop".to_string(),
             FatalError::MismatchedTypes(expected, got) => {
-                format!("Mismatched types: expected {}, got {}", expected, got)
+                if expected.len() == 1 {
+                    format!("Mismatched types: expected {}, got {}", expected[0], got)
+                } else {
+                    format!(
+                        "Mismatched types: expected one of {}; got {}",
+                        expected.join(", "),
+                        got,
+                    )
+                }
             }
             FatalError::InvalidCast(value, type_) => {
                 format!("Cannot cast '{}' to '{}'", value, type_)
@@ -141,14 +133,20 @@ impl ErrorHandler {
                 "Only primitive types (int, float and bool) can be cast using 'as' expression"
                     .to_string()
             }
-            FatalError::UndeclaredVariable(name) => format!("Undeclared variable '{}'", name),
             FatalError::NonStructMemberAccess(name) => {
                 format!("Member access of non-struct variable '{}'", name)
             }
             FatalError::NoSuchMember(type_, member) => {
                 format!("'{}' has no such member: '{}'", type_, member)
             }
-            FatalError::UserError(msg, stack_trace) => {
+            FatalError::InvalidNumberOfArgs(from, to, got) => match to.cmp(&0) {
+                Ordering::Less => format!("Expected {} or more arguments, got {}", from, got),
+                Ordering::Equal => format!("Expected {} arguments, got {}", from, got),
+                Ordering::Greater => {
+                    format!("Expected from {} to {} arguments, got {}", from, to, got)
+                }
+            },
+            FatalError::RuntimeError(msg, stack_trace) => {
                 format!("{}\n\n{}", msg, Self::format_stack_trace(stack_trace))
             }
             FatalError::InexhaustiveMatch(stack_trace) => format!(

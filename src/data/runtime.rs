@@ -2,12 +2,31 @@ use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 use super::progtree::Literal;
 
-#[derive(Clone, PartialEq)]
+#[derive(Copy, Clone)]
+pub enum Declaration {
+    Variable,
+    Type,
+    Variant,
+    Function,
+}
+
+impl Display for Declaration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Variable => write!(f, "variable"),
+            Self::Type => write!(f, "type"),
+            Self::Variant => write!(f, "variant"),
+            Self::Function => write!(f, "function"),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub enum RuntimeValue {
     Integer(i64),
     Float(f64),
     Bool(bool),
-    String(String),
+    String(Rc<String>),
     Struct {
         type_: String,
         fields: Rc<RefCell<HashMap<String, RuntimeValue>>>,
@@ -17,6 +36,7 @@ pub enum RuntimeValue {
         variant: String,
         data: Box<RuntimeValue>,
     },
+    None,
 }
 
 impl RuntimeValue {
@@ -28,7 +48,14 @@ impl RuntimeValue {
             Self::String(_) => "string",
             Self::Struct { type_, .. } => type_,
             Self::EnumVariant { type_, .. } => type_,
+            Self::None => "none",
         }
+    }
+}
+
+impl Default for RuntimeValue {
+    fn default() -> Self {
+        RuntimeValue::None
     }
 }
 
@@ -55,6 +82,7 @@ impl Display for RuntimeValue {
                 variant,
                 data,
             } => write!(fmt, "{}.{}({})", type_, variant, data),
+            RuntimeValue::None => write!(fmt, "none"),
         }
     }
 }
@@ -65,7 +93,7 @@ impl PartialEq<Literal> for RuntimeValue {
             (Self::Integer(l), Literal::Integer(r)) => l == r,
             (Self::Float(l), Literal::Float(r)) => l == r,
             (Self::Bool(l), Literal::Bool(r)) => l == r,
-            (Self::String(l), Literal::String(r)) => l == r,
+            (Self::String(l), Literal::String(r)) => l.as_ref() == r,
             _ => false,
         }
     }
@@ -77,33 +105,32 @@ impl PartialOrd<Literal> for RuntimeValue {
             (Self::Integer(l), Literal::Integer(r)) => l.partial_cmp(r),
             (Self::Float(l), Literal::Float(r)) => l.partial_cmp(r),
             (Self::Bool(l), Literal::Bool(r)) => l.partial_cmp(r),
-            (Self::String(l), Literal::String(r)) => l.partial_cmp(r),
+            (Self::String(l), Literal::String(r)) => l.as_ref().partial_cmp(r),
             _ => None,
         }
     }
 }
 
-#[derive(Clone, PartialEq)]
-pub struct Variable {
-    type_: String,
-    mutable: bool,
-    pub value: RuntimeValue,
+impl From<i64> for RuntimeValue {
+    fn from(i: i64) -> Self {
+        RuntimeValue::Integer(i)
+    }
 }
 
-impl Variable {
-    pub fn new(type_: String, mutable: bool, value: RuntimeValue) -> Variable {
-        Variable {
-            type_,
-            mutable,
-            value,
-        }
+impl From<f64> for RuntimeValue {
+    fn from(f: f64) -> Self {
+        RuntimeValue::Float(f)
     }
+}
 
-    pub fn get_type(&self) -> &str {
-        &self.type_
+impl From<bool> for RuntimeValue {
+    fn from(b: bool) -> Self {
+        RuntimeValue::Bool(b)
     }
+}
 
-    pub fn is_mutable(&self) -> bool {
-        self.mutable
+impl From<String> for RuntimeValue {
+    fn from(s: String) -> Self {
+        RuntimeValue::String(Rc::new(s))
     }
 }

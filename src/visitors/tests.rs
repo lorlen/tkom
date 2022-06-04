@@ -236,3 +236,49 @@ executor_test!(
     ",
     RuntimeValue::from(35)
 );
+
+executor_test!(
+    test_as,
+    "
+    fn main() {
+        return 4 / 2.1 as int;
+    }
+    ",
+    RuntimeValue::from(2)
+);
+
+executor_test!(
+    test_ref,
+    "
+    struct TestStruct {
+        int a
+    }
+
+    fn test(s) {
+        s.a = 2;
+    }
+
+    fn main() {
+        let s = new(\"TestStruct\", 1);
+        test(s);
+        return s.a;
+    }
+    ",
+    RuntimeValue::from(2)
+);
+
+executor_test!(
+    test_val,
+    "
+    fn test(i) {
+        i = 2;
+    }
+
+    fn main() {
+        let i = 1;
+        test(i);
+        return i;
+    }
+    ",
+    RuntimeValue::from(1)
+);

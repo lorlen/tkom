@@ -38,10 +38,12 @@ pub enum FatalError {
     NonStructMemberAccess(String),
     NoSuchMember(String, String),
     InvalidNumberOfArgs(usize, isize, usize),
+    OnlyBindingCatchAll,
 
     // Runtime errors
     RuntimeError(String, Vec<String>),
     InexhaustiveMatch(Vec<String>),
+    DivideByZero,
 
     // Indicates a bug in the interpreter (should never happen!)
     InterpreterBug(String),
@@ -146,6 +148,9 @@ impl ErrorHandler {
                     format!("Expected from {} to {} arguments, got {}", from, to, got)
                 }
             },
+            FatalError::OnlyBindingCatchAll => {
+                "A binding or catch-all ('_') must be the only pattern alternative".to_string()
+            }
             FatalError::RuntimeError(msg, stack_trace) => {
                 format!("{}\n\n{}", msg, Self::format_stack_trace(stack_trace))
             }
@@ -153,6 +158,7 @@ impl ErrorHandler {
                 "Inexhaustive match. Hint: use '_' to create a catch-all pattern.\n\n{}",
                 Self::format_stack_trace(stack_trace)
             ),
+            FatalError::DivideByZero => "Integer division by zero".to_string(),
             FatalError::InterpreterBug(msg) => format!("BUG: {}", msg),
         };
 

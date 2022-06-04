@@ -15,14 +15,6 @@ use crate::{
 
 use super::Visitor;
 
-// What needs to be checked:
-//  - duplicate top-level declarations (should be handled by the parser)
-//  - compatible types in expressions (int and float for arithmetic, bool in relational, string in +)
-//  - binding or catch-all should be the only pattern part
-//  - variables should have defined types
-//  - function calls should match their declarations
-//  - break and continue must be inside of loop, while yield must not be in a top-level block of function or loop
-
 #[allow(clippy::enum_variant_names)]
 #[derive(Clone, Copy, PartialEq)]
 enum ControlFlow {
@@ -201,8 +193,18 @@ impl<'a> Executor<'a> {
                         }
                     }
                 },
-                PatternPart::Binding(binding) => Ok(Some((binding.clone(), matchee.clone()))),
-                PatternPart::CatchAll => Ok(None),
+                PatternPart::Binding(binding) => {
+                    if pattern.len() != 1 {
+                        ErrorHandler::handle_error(FatalError::OnlyBindingCatchAll);
+                    }
+                    Ok(Some((binding.clone(), matchee.clone())))
+                }
+                PatternPart::CatchAll => {
+                    if pattern.len() != 1 {
+                        ErrorHandler::handle_error(FatalError::OnlyBindingCatchAll);
+                    }
+                    Ok(None)
+                }
             };
 
             if result.is_ok() {
@@ -260,7 +262,9 @@ impl<'a> Executor<'a> {
                         },
                         MulOperator::Divide => match (accumulator, self.visit_expression(expr)) {
                             (RuntimeValue::Integer(l), RuntimeValue::Integer(r)) => {
-                                RuntimeValue::Integer(l / r)
+                                RuntimeValue::Integer(l.checked_div(r).unwrap_or_else(|| {
+                                    ErrorHandler::handle_error(FatalError::DivideByZero)
+                                }))
                             }
                             (RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                                 RuntimeValue::Float(l / r)
@@ -595,6 +599,7 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
                 Some(ControlFlow::ShouldContinue) => {
                     self.env.control_flow = None;
                 }
+                Some(ControlFlow::ShouldReturn) => break,
                 _ => (),
             }
         }
@@ -633,6 +638,7 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
                 Some(ControlFlow::ShouldContinue) => {
                     self.env.control_flow = None;
                 }
+                Some(ControlFlow::ShouldReturn) => break,
                 _ => (),
             }
         }

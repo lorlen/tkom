@@ -6,9 +6,10 @@ use crate::{
         runtime::{Declaration, RuntimeValue},
     },
     error::{ErrorHandler, FatalError},
+    visitors::executor::Environment,
 };
 
-pub type StdlibFunction = fn(&Program, Vec<RuntimeValue>) -> RuntimeValue;
+pub type StdlibFunction = fn(&Program, &Environment, Vec<RuntimeValue>) -> RuntimeValue;
 
 pub fn get_stdlib_function(name: &str) -> Option<StdlibFunction> {
     match name {
@@ -20,22 +21,27 @@ pub fn get_stdlib_function(name: &str) -> Option<StdlibFunction> {
     }
 }
 
-fn print(_: &Program, args: Vec<RuntimeValue>) -> RuntimeValue {
+fn print(_: &Program, _: &Environment, args: Vec<RuntimeValue>) -> RuntimeValue {
     for value in args {
         print!("{}", value);
     }
     RuntimeValue::None
 }
 
-fn println(program: &Program, args: Vec<RuntimeValue>) -> RuntimeValue {
-    print(program, args);
+fn println(program: &Program, env: &Environment, args: Vec<RuntimeValue>) -> RuntimeValue {
+    print(program, env, args);
     println!();
     RuntimeValue::None
 }
 
-fn input(_: &Program, args: Vec<RuntimeValue>) -> RuntimeValue {
-    if args.is_empty() {
-        ErrorHandler::handle_error(FatalError::InvalidNumberOfArgs(0, 0, args.len()));
+fn input(_: &Program, env: &Environment, args: Vec<RuntimeValue>) -> RuntimeValue {
+    if !args.is_empty() {
+        ErrorHandler::handle_error(FatalError::InvalidNumberOfArgs(
+            0,
+            0,
+            args.len(),
+            env.get_stack_trace(),
+        ));
     }
 
     let mut line = String::new();
@@ -45,7 +51,7 @@ fn input(_: &Program, args: Vec<RuntimeValue>) -> RuntimeValue {
     RuntimeValue::String(Rc::new(line))
 }
 
-fn new(program: &Program, args: Vec<RuntimeValue>) -> RuntimeValue {
+fn new(program: &Program, env: &Environment, args: Vec<RuntimeValue>) -> RuntimeValue {
     let args_len = args.len();
     let mut args_iter = args.into_iter();
 
@@ -57,14 +63,23 @@ fn new(program: &Program, args: Vec<RuntimeValue>) -> RuntimeValue {
                         struct_def.fields.len() + 1,
                         0,
                         args_len,
+                        env.get_stack_trace(),
                     ));
                 }
-                let fields = struct_def
-                    .fields
-                    .iter()
-                    .map(|(_, name)| name.to_string())
-                    .zip(args_iter)
-                    .collect::<HashMap<String, RuntimeValue>>();
+
+                let mut fields = HashMap::new();
+
+                for ((type_, name), arg) in struct_def.fields.iter().zip(args_iter) {
+                    if type_ != arg.type_name() {
+                        ErrorHandler::handle_error(FatalError::MismatchedTypes(
+                            vec![type_.to_string()],
+                            arg.type_name().to_string(),
+                            env.get_stack_trace(),
+                        ))
+                    }
+                    fields.insert(name.to_string(), arg);
+                }
+
                 RuntimeValue::Struct {
                     type_: name.to_string(),
                     fields: Rc::new(RefCell::new(fields)),
@@ -80,7 +95,10 @@ fn new(program: &Program, args: Vec<RuntimeValue>) -> RuntimeValue {
                         Some((_, None)) => {
                             if args_len != 2 {
                                 ErrorHandler::handle_error(FatalError::InvalidNumberOfArgs(
-                                    2, 0, args_len,
+                                    2,
+                                    0,
+                                    args_len,
+                                    env.get_stack_trace(),
                                 ));
                             }
                             RuntimeValue::EnumVariant {
@@ -89,39 +107,67 @@ fn new(program: &Program, args: Vec<RuntimeValue>) -> RuntimeValue {
                                 data: Box::new(RuntimeValue::None),
                             }
                         }
-                        Some((_, Some(_))) => {
+                        Some((_, Some(type_))) => {
                             if args_len != 3 {
                                 ErrorHandler::handle_error(FatalError::InvalidNumberOfArgs(
-                                    3, 0, args_len,
+                                    3,
+                                    0,
+                                    args_len,
+                                    env.get_stack_trace(),
                                 ));
                             }
+
+                            let data = args_iter.next().unwrap();
+
+                            if type_ != data.type_name() {
+                                ErrorHandler::handle_error(FatalError::MismatchedTypes(
+                                    vec![type_.to_string()],
+                                    data.type_name().to_string(),
+                                    env.get_stack_trace(),
+                                ));
+                            }
+
                             RuntimeValue::EnumVariant {
                                 type_: (*name).clone(),
                                 variant: (*variant_name).clone(),
-                                data: Box::new(args_iter.next().unwrap()),
+                                data: Box::new(data),
                             }
                         }
                         _ => ErrorHandler::handle_error(FatalError::Undeclared(
                             Declaration::Variant,
                             variant_name.to_string(),
+                            env.get_stack_trace(),
                         )),
                     }
                 }
                 Some(other) => ErrorHandler::handle_error(FatalError::MismatchedTypes(
                     vec!["string".to_string()],
                     other.type_name().to_string(),
+                    env.get_stack_trace(),
                 )),
-                _ => ErrorHandler::handle_error(FatalError::InvalidNumberOfArgs(2, 3, args_len)),
+                _ => ErrorHandler::handle_error(FatalError::InvalidNumberOfArgs(
+                    2,
+                    3,
+                    args_len,
+                    env.get_stack_trace(),
+                )),
             },
             _ => ErrorHandler::handle_error(FatalError::Undeclared(
                 Declaration::Type,
                 name.to_string(),
+                env.get_stack_trace(),
             )),
         },
         Some(other) => ErrorHandler::handle_error(FatalError::MismatchedTypes(
             vec!["string".to_string()],
             other.type_name().to_string(),
+            env.get_stack_trace(),
         )),
-        _ => ErrorHandler::handle_error(FatalError::InvalidNumberOfArgs(1, -1, args_len)),
+        _ => ErrorHandler::handle_error(FatalError::InvalidNumberOfArgs(
+            1,
+            -1,
+            args_len,
+            env.get_stack_trace(),
+        )),
     }
 }

@@ -17,14 +17,14 @@ use super::Visitor;
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Clone, Copy, PartialEq)]
-enum ControlFlow {
+pub enum ControlFlow {
     ShouldReturn,
     ShouldYield,
     ShouldBreak,
     ShouldContinue,
 }
 
-struct CallContext {
+pub struct CallContext {
     name: String,
     scopes: VecDeque<HashMap<String, RuntimeValue>>,
 }
@@ -90,7 +90,7 @@ impl CallContext {
 }
 
 #[derive(Default)]
-struct Environment {
+pub struct Environment {
     globals: HashMap<String, RuntimeValue>,
     contexts: VecDeque<CallContext>,
     pub return_value: RuntimeValue,
@@ -116,7 +116,7 @@ impl Environment {
         }
     }
 
-    pub fn get_stacktrace(&self) -> Vec<String> {
+    pub fn get_stack_trace(&self) -> Vec<String> {
         self.contexts.iter().map(|ctx| ctx.name.clone()).collect()
     }
 
@@ -128,25 +128,6 @@ impl Environment {
     }
 }
 
-fn invalid_type(expected: &[&str], got: RuntimeValue) -> ! {
-    ErrorHandler::handle_error(FatalError::MismatchedTypes(
-        expected.iter().map(|e| e.to_string()).collect(),
-        got.type_name().to_string(),
-    ));
-}
-
-fn invalid_type2(expected: &[&str], got1: RuntimeValue, got2: RuntimeValue) -> ! {
-    let type_name = if !expected.contains(&got1.type_name()) {
-        got1.type_name()
-    } else {
-        got2.type_name()
-    };
-    ErrorHandler::handle_error(FatalError::MismatchedTypes(
-        expected.iter().map(|e| e.to_string()).collect(),
-        type_name.to_string(),
-    ));
-}
-
 #[derive(Default)]
 pub struct Executor<'a> {
     program: Option<&'a Program>,
@@ -154,11 +135,36 @@ pub struct Executor<'a> {
 }
 
 impl<'a> Executor<'a> {
+    fn invalid_type(&mut self, expected: &[&str], got: RuntimeValue) -> ! {
+        ErrorHandler::handle_error(FatalError::MismatchedTypes(
+            expected.iter().map(|e| e.to_string()).collect(),
+            got.type_name().to_string(),
+            self.env.get_stack_trace(),
+        ));
+    }
+
+    fn invalid_type2(&mut self, expected: &[&str], got1: RuntimeValue, got2: RuntimeValue) -> ! {
+        let type_name = if !expected.contains(&got1.type_name()) {
+            got1.type_name()
+        } else {
+            got2.type_name()
+        };
+        ErrorHandler::handle_error(FatalError::MismatchedTypes(
+            expected.iter().map(|e| e.to_string()).collect(),
+            type_name.to_string(),
+            self.env.get_stack_trace(),
+        ));
+    }
+
     fn match_pattern(
         &mut self,
         pattern: &Vec<PatternPart>,
         matchee: &RuntimeValue,
     ) -> Result<Option<(String, RuntimeValue)>, ()> {
+        if pattern.is_empty() {
+            return Ok(None);
+        }
+
         for part in pattern {
             let result = match part {
                 PatternPart::EnumVariant(type_, variant, inner_pattern) => match matchee {
@@ -195,13 +201,17 @@ impl<'a> Executor<'a> {
                 },
                 PatternPart::Binding(binding) => {
                     if pattern.len() != 1 {
-                        ErrorHandler::handle_error(FatalError::OnlyBindingCatchAll);
+                        ErrorHandler::handle_error(FatalError::OnlyBindingCatchAll(
+                            self.env.get_stack_trace(),
+                        ));
                     }
                     Ok(Some((binding.clone(), matchee.clone())))
                 }
                 PatternPart::CatchAll => {
                     if pattern.len() != 1 {
-                        ErrorHandler::handle_error(FatalError::OnlyBindingCatchAll);
+                        ErrorHandler::handle_error(FatalError::OnlyBindingCatchAll(
+                            self.env.get_stack_trace(),
+                        ));
                     }
                     Ok(None)
                 }
@@ -231,7 +241,9 @@ impl<'a> Executor<'a> {
                             (RuntimeValue::String(l), RuntimeValue::String(r)) => {
                                 RuntimeValue::String(Rc::new(l.to_string() + r.as_ref()))
                             }
-                            (acc, other) => invalid_type2(&["int", "float", "string"], acc, other),
+                            (acc, other) => {
+                                self.invalid_type2(&["int", "float", "string"], acc, other)
+                            }
                         },
                         AddOperator::Minus => match (accumulator, self.visit_expression(expr)) {
                             (RuntimeValue::Integer(l), RuntimeValue::Integer(r)) => {
@@ -240,7 +252,7 @@ impl<'a> Executor<'a> {
                             (RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                                 RuntimeValue::Float(l - r)
                             }
-                            (acc, other) => invalid_type2(&["int", "float"], acc, other),
+                            (acc, other) => self.invalid_type2(&["int", "float"], acc, other),
                         },
                     };
                     accumulator = new_val;
@@ -258,7 +270,7 @@ impl<'a> Executor<'a> {
                             (RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                                 RuntimeValue::Float(l * r)
                             }
-                            (acc, other) => invalid_type2(&["int", "float"], acc, other),
+                            (acc, other) => self.invalid_type2(&["int", "float"], acc, other),
                         },
                         MulOperator::Divide => match (accumulator, self.visit_expression(expr)) {
                             (RuntimeValue::Integer(l), RuntimeValue::Integer(r)) => {
@@ -269,7 +281,7 @@ impl<'a> Executor<'a> {
                             (RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                                 RuntimeValue::Float(l / r)
                             }
-                            (acc, other) => invalid_type2(&["int", "float"], acc, other),
+                            (acc, other) => self.invalid_type2(&["int", "float"], acc, other),
                         },
                         MulOperator::Modulo => match (accumulator, self.visit_expression(expr)) {
                             (RuntimeValue::Integer(l), RuntimeValue::Integer(r)) => {
@@ -278,7 +290,7 @@ impl<'a> Executor<'a> {
                             (RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                                 RuntimeValue::Float(l % r)
                             }
-                            (acc, other) => invalid_type2(&["int", "float"], acc, other),
+                            (acc, other) => self.invalid_type2(&["int", "float"], acc, other),
                         },
                     };
                     accumulator = new_val;
@@ -300,7 +312,7 @@ impl<'a> Executor<'a> {
                         (RuntimeValue::String(l), RuntimeValue::String(r)) => {
                             RuntimeValue::Bool(l > r)
                         }
-                        (l, r) => invalid_type2(&["int", "float", "string"], l, r),
+                        (l, r) => self.invalid_type2(&["int", "float", "string"], l, r),
                     },
                     RelOperator::LessThan => match (left, right) {
                         (RuntimeValue::Integer(l), RuntimeValue::Integer(r)) => {
@@ -312,7 +324,7 @@ impl<'a> Executor<'a> {
                         (RuntimeValue::String(l), RuntimeValue::String(r)) => {
                             RuntimeValue::Bool(l < r)
                         }
-                        (l, r) => invalid_type2(&["int", "float", "string"], l, r),
+                        (l, r) => self.invalid_type2(&["int", "float", "string"], l, r),
                     },
                     RelOperator::GreaterEqual => match (left, right) {
                         (RuntimeValue::Integer(l), RuntimeValue::Integer(r)) => {
@@ -324,7 +336,7 @@ impl<'a> Executor<'a> {
                         (RuntimeValue::String(l), RuntimeValue::String(r)) => {
                             RuntimeValue::Bool(l >= r)
                         }
-                        (l, r) => invalid_type2(&["int", "float", "string"], l, r),
+                        (l, r) => self.invalid_type2(&["int", "float", "string"], l, r),
                     },
                     RelOperator::LessEqual => match (left, right) {
                         (RuntimeValue::Integer(l), RuntimeValue::Integer(r)) => {
@@ -336,7 +348,7 @@ impl<'a> Executor<'a> {
                         (RuntimeValue::String(l), RuntimeValue::String(r)) => {
                             RuntimeValue::Bool(l <= r)
                         }
-                        (l, r) => invalid_type2(&["int", "float", "string"], l, r),
+                        (l, r) => self.invalid_type2(&["int", "float", "string"], l, r),
                     },
                     RelOperator::Equal => match (left, right) {
                         (RuntimeValue::Integer(l), RuntimeValue::Integer(r)) => {
@@ -348,7 +360,7 @@ impl<'a> Executor<'a> {
                         (RuntimeValue::String(l), RuntimeValue::String(r)) => {
                             RuntimeValue::Bool(l == r)
                         }
-                        (l, r) => invalid_type2(&["int", "float", "string"], l, r),
+                        (l, r) => self.invalid_type2(&["int", "float", "string"], l, r),
                     },
                     RelOperator::NotEqual => match (left, right) {
                         (RuntimeValue::Integer(l), RuntimeValue::Integer(r)) => {
@@ -360,7 +372,7 @@ impl<'a> Executor<'a> {
                         (RuntimeValue::String(l), RuntimeValue::String(r)) => {
                             RuntimeValue::Bool(l != r)
                         }
-                        (l, r) => invalid_type2(&["int", "float", "string"], l, r),
+                        (l, r) => self.invalid_type2(&["int", "float", "string"], l, r),
                     },
                 }
             }
@@ -370,7 +382,7 @@ impl<'a> Executor<'a> {
                     accumulator = match accumulator {
                         RuntimeValue::Bool(false) => break,
                         RuntimeValue::Bool(true) => self.visit_expression(expr),
-                        other => invalid_type(&["bool"], other),
+                        other => self.invalid_type(&["bool"], other),
                     }
                 }
                 accumulator
@@ -381,7 +393,7 @@ impl<'a> Executor<'a> {
                     accumulator = match accumulator {
                         RuntimeValue::Bool(true) => break,
                         RuntimeValue::Bool(false) => self.visit_expression(expr),
-                        other => invalid_type(&["bool"], other),
+                        other => self.invalid_type(&["bool"], other),
                     }
                 }
                 accumulator
@@ -439,6 +451,7 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
                 if !self.env.curr_context().new_var(&var_def.name, var) {
                     ErrorHandler::handle_error(FatalError::DuplicateDeclaration(
                         var_def.name.clone(),
+                        self.env.get_stack_trace(),
                     ));
                 }
                 RuntimeValue::None
@@ -469,6 +482,7 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
                         ErrorHandler::handle_error(FatalError::Undeclared(
                             Declaration::Variable,
                             assignment.path[0].clone(),
+                            self.env.get_stack_trace(),
                         ))
                     }
                 } else {
@@ -487,10 +501,14 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
                                         _ => ErrorHandler::handle_error(FatalError::NoSuchMember(
                                             last_name.clone(),
                                             name.clone(),
+                                            self.env.get_stack_trace(),
                                         )),
                                     },
                                     _ => ErrorHandler::handle_error(
-                                        FatalError::NonStructMemberAccess(last_name.clone()),
+                                        FatalError::NonStructMemberAccess(
+                                            last_name.clone(),
+                                            self.env.get_stack_trace(),
+                                        ),
                                     ),
                                 }
                                 last_name = name;
@@ -507,17 +525,20 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
                                         ErrorHandler::handle_error(FatalError::NoSuchMember(
                                             last_name.clone(),
                                             name.clone(),
+                                            self.env.get_stack_trace(),
                                         ));
                                     }
                                 }
                                 _ => ErrorHandler::handle_error(FatalError::NonStructMemberAccess(
                                     last_name.clone(),
+                                    self.env.get_stack_trace(),
                                 )),
                             }
                         }
                         _ => ErrorHandler::handle_error(FatalError::Undeclared(
                             Declaration::Variable,
                             assignment.path[0].clone(),
+                            self.env.get_stack_trace(),
                         )),
                     }
                 }
@@ -540,14 +561,14 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
             }
             Statement::Break => {
                 if !self.env.in_loop {
-                    ErrorHandler::handle_error(FatalError::NotInLoop);
+                    ErrorHandler::handle_error(FatalError::NotInLoop(self.env.get_stack_trace()));
                 }
                 self.env.control_flow = Some(ControlFlow::ShouldBreak);
                 RuntimeValue::None
             }
             Statement::Continue => {
                 if !self.env.in_loop {
-                    ErrorHandler::handle_error(FatalError::NotInLoop);
+                    ErrorHandler::handle_error(FatalError::NotInLoop(self.env.get_stack_trace()));
                 }
                 self.env.control_flow = Some(ControlFlow::ShouldContinue);
                 RuntimeValue::None
@@ -560,7 +581,7 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
             match self.visit_expression(&branch.condition) {
                 RuntimeValue::Bool(true) => return self.visit_block(&branch.block),
                 RuntimeValue::Bool(false) => (),
-                other => invalid_type(&["bool"], other),
+                other => self.invalid_type(&["bool"], other),
             }
         }
         RuntimeValue::None
@@ -579,7 +600,7 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
             }
         }
 
-        ErrorHandler::handle_error(FatalError::InexhaustiveMatch(self.env.get_stacktrace()));
+        ErrorHandler::handle_error(FatalError::InexhaustiveMatch(self.env.get_stack_trace()));
     }
 
     fn visit_while(&mut self, while_: &While) -> RuntimeValue {
@@ -588,7 +609,7 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
             match self.visit_expression(&while_.condition) {
                 RuntimeValue::Bool(true) => self.visit_block(&while_.block),
                 RuntimeValue::Bool(false) => break,
-                other => invalid_type(&["bool"], other),
+                other => self.invalid_type(&["bool"], other),
             };
 
             match self.env.control_flow {
@@ -611,12 +632,12 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
         self.env.in_loop = true;
         let lower = match self.visit_expression(&for_.range.lower) {
             RuntimeValue::Integer(i) => i,
-            other => invalid_type(&["int"], other),
+            other => self.invalid_type(&["int"], other),
         };
 
         let upper = match self.visit_expression(&for_.range.upper) {
             RuntimeValue::Integer(i) => i,
-            other => invalid_type(&["int"], other),
+            other => self.invalid_type(&["int"], other),
         } - (!for_.range.inclusive as i64);
 
         self.env.curr_context().new_scope();
@@ -653,12 +674,12 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
             Expression::Binary(binary) => self.exec_binary_expr(binary),
             Expression::Not(not) => match self.visit_expression(&not.subexpr) {
                 RuntimeValue::Bool(b) => RuntimeValue::Bool(!b),
-                other => invalid_type(&["bool"], other),
+                other => self.invalid_type(&["bool"], other),
             },
             Expression::Neg(not) => match self.visit_expression(&not.subexpr) {
                 RuntimeValue::Integer(i) => RuntimeValue::Integer(-i),
                 RuntimeValue::Float(f) => RuntimeValue::Float(-f),
-                other => invalid_type(&["bool"], other),
+                other => self.invalid_type(&["bool"], other),
             },
             Expression::As(as_) => match self.visit_expression(&as_.expr) {
                 RuntimeValue::Integer(i) => match as_.cast_type.as_str() {
@@ -668,6 +689,7 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
                     _ => ErrorHandler::handle_error(FatalError::InvalidCast(
                         i.to_string(),
                         as_.cast_type.clone(),
+                        self.env.get_stack_trace(),
                     )),
                 },
                 RuntimeValue::Float(f) => match as_.cast_type.as_str() {
@@ -677,6 +699,7 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
                     _ => ErrorHandler::handle_error(FatalError::InvalidCast(
                         f.to_string(),
                         as_.cast_type.clone(),
+                        self.env.get_stack_trace(),
                     )),
                 },
                 RuntimeValue::Bool(b) => match as_.cast_type.as_str() {
@@ -686,9 +709,12 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
                     _ => ErrorHandler::handle_error(FatalError::InvalidCast(
                         b.to_string(),
                         as_.cast_type.clone(),
+                        self.env.get_stack_trace(),
                     )),
                 },
-                _ => ErrorHandler::handle_error(FatalError::NonPrimitiveCast),
+                _ => ErrorHandler::handle_error(FatalError::NonPrimitiveCast(
+                    self.env.get_stack_trace(),
+                )),
             },
             Expression::Value(value) => match value {
                 Value::Literal(literal) => match literal.clone() {
@@ -705,6 +731,7 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
                         _ => ErrorHandler::handle_error(FatalError::Undeclared(
                             Declaration::Variable,
                             last_name.clone(),
+                            self.env.get_stack_trace(),
                         )),
                     };
 
@@ -716,11 +743,13 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
                                     _ => ErrorHandler::handle_error(FatalError::NoSuchMember(
                                         last_name.clone(),
                                         name.clone(),
+                                        self.env.get_stack_trace(),
                                     )),
                                 }
                             }
                             _ => ErrorHandler::handle_error(FatalError::NonStructMemberAccess(
                                 last_name.clone(),
+                                self.env.get_stack_trace(),
                             )),
                         }
                         last_name = name;
@@ -744,7 +773,7 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
             .collect::<Vec<_>>();
 
         if let Some(func) = get_stdlib_function(&call.name) {
-            return func(self.program.unwrap(), evaluated_args);
+            return func(self.program.unwrap(), &self.env, evaluated_args);
         }
 
         let called_function = match self.program.unwrap().function_defs.get(&call.name) {
@@ -752,8 +781,18 @@ impl<'a> Visitor<'a, RuntimeValue> for Executor<'a> {
             _ => ErrorHandler::handle_error(FatalError::Undeclared(
                 Declaration::Function,
                 call.name.clone(),
+                self.env.get_stack_trace(),
             )),
         };
+
+        if call.arguments.len() != called_function.parameters.len() {
+            ErrorHandler::handle_error(FatalError::InvalidNumberOfArgs(
+                called_function.parameters.len(),
+                0,
+                call.arguments.len(),
+                self.env.get_stack_trace(),
+            ));
+        }
 
         self.env.new_context(
             &call.name,

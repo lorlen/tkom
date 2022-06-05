@@ -49,6 +49,58 @@ executor_test!(
 );
 
 executor_test!(
+    test_and_short_circuit,
+    "
+    struct TestStruct {
+        int a
+    }
+
+    fn test(s) {
+        s.a = 2;
+    }
+
+    fn main() {
+        let s = new(\"TestStruct\", 1);
+        let b = false & test(s);
+        return s.a;
+    }
+    ",
+    RuntimeValue::from(1)
+);
+
+executor_test!(
+    test_or_short_circuit,
+    "
+    struct TestStruct {
+        int a
+    }
+
+    fn test(s) {
+        s.a = 2;
+    }
+
+    fn main() {
+        let s = new(\"TestStruct\", 1);
+        let b = true | test(s);
+        return s.a;
+    }
+    ",
+    RuntimeValue::from(1)
+);
+
+executor_test!(
+    test_const,
+    "
+    const ANSWER_TO_LIFE = 42;
+
+    fn main() {
+        return ANSWER_TO_LIFE;
+    }
+    ",
+    RuntimeValue::from(42)
+);
+
+executor_test!(
     test_yield,
     "
     fn main() {
@@ -74,6 +126,20 @@ executor_test!(
     }
     ",
     RuntimeValue::from(55)
+);
+
+executor_test!(
+    test_while,
+    "
+    fn main() {
+        let a = 0;
+        while a < 10 {
+            a += 1;
+        }
+        return a;
+    }
+    ",
+    RuntimeValue::from(10)
 );
 
 executor_test!(
@@ -123,13 +189,14 @@ executor_test!(
     test_match,
     "
     fn main() {
-        return match 3 {
+        return match 6 {
             1 | 2 -> 5,
+            3 .. 5 -> 1,
             a -> a
         };
     }
     ",
-    RuntimeValue::from(3)
+    RuntimeValue::from(6)
 );
 
 executor_test!(
@@ -281,4 +348,137 @@ executor_test!(
     }
     ",
     RuntimeValue::from(1)
+);
+
+executor_test!(
+    test_duplicate_var,
+    "
+    fn main() {
+        let a = 1;
+        let a = 2;
+    }
+    ",
+    RuntimeValue::None,
+    should_panic
+);
+
+executor_test!(
+    test_set_undecl_var,
+    "
+    fn main() {
+        a = 1;
+    }
+    ",
+    RuntimeValue::None,
+    should_panic
+);
+
+executor_test!(
+    test_get_undecl_var,
+    "
+    fn main() {
+        return a;
+    }
+    ",
+    RuntimeValue::None,
+    should_panic
+);
+
+executor_test!(
+    test_bad_struct_field_type,
+    "
+    struct TestStruct {
+        int a;
+    }
+    fn main() {
+        let s = new(\"TestStruct\", 1.0);
+    }
+    ",
+    RuntimeValue::None,
+    should_panic
+);
+
+executor_test!(
+    test_bad_pattern,
+    "
+    fn main() {
+        match 1 {
+            1 | a -> a
+        }
+    }
+    ",
+    RuntimeValue::None,
+    should_panic
+);
+
+executor_test!(
+    test_div_zero,
+    "
+    fn main() {
+        let a = 1 / 0;
+    }
+    ",
+    RuntimeValue::None,
+    should_panic
+);
+
+executor_test!(
+    test_non_struct_member_access,
+    "
+    fn main() {
+        let a = 1;
+        let c = a.b;
+    }
+    ",
+    RuntimeValue::None,
+    should_panic
+);
+
+executor_test!(
+    test_break_not_in_loop,
+    "
+    fn main() {
+        break;
+    }
+    ",
+    RuntimeValue::None,
+    should_panic
+);
+
+executor_test!(
+    test_bad_cond_type,
+    "
+    fn main() {
+        if 1 {}
+    }
+    ",
+    RuntimeValue::None,
+    should_panic
+);
+
+executor_test!(
+    test_bad_num_arguments,
+    "
+    fn test(n) {
+        return n + 1;
+    }
+    fn main() {
+        test();
+    }
+    ",
+    RuntimeValue::None,
+    should_panic
+);
+
+executor_test!(
+    test_set_const,
+    "
+    const A = 1;
+
+    fn main() {
+        A = 2;
+    }
+    ",
+    RuntimeValue::None,
+    should_panic
 );

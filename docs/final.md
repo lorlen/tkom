@@ -379,7 +379,49 @@ fn main() {
 }
 ```
 
+#### Struktury
 
+```
+struct Vector2D {
+	float x,
+	float y,
+}
+
+fn dot(v1, v2) {
+	return v1.x * v2.x + v1.y * v2.y;
+}
+
+fn main() {
+	let v1 = new("Vector2D", 1.0, 2.0);
+	let v2 = new("Vector2D", 3.0, 4.0);
+	println(dot(v1, v2));
+}
+```
+
+#### Enumeracje
+
+```
+enum MaybeInt {
+	Some(int),
+	None
+}
+
+fn some_if_gt_10(n) {
+	if n > 10 {
+		return new("MaybeInt", "Some", n);
+	} else {
+		return new("MaybeInt", "None");
+	}
+}
+
+fn main() {
+	let a = 1;
+	match some_if_gt_10(a) {
+		MaybeInt.Some(b) -> println(b, " is greater than 10"),
+		MaybeInt.None -> println(a, " is less or equal 10")
+	}
+}
+```
 
 ## Wykorzystane narzędzia
 

@@ -40,7 +40,9 @@ impl Parser {
 
             if let Some(const_def) = maybe_const_def {
                 if program.const_defs.contains_key(&const_def.name) {
-                    ErrorHandler::handle_error(FatalError::DuplicateDeclaration(const_def.name));
+                    ErrorHandler::handle_error(FatalError::TopLevelDuplicateDeclaration(
+                        const_def.name,
+                    ));
                 }
                 program.const_defs.insert(const_def.name.clone(), const_def);
             }
@@ -52,7 +54,7 @@ impl Parser {
                 };
 
                 if program.type_defs.contains_key(&name) {
-                    ErrorHandler::handle_error(FatalError::DuplicateDeclaration(name));
+                    ErrorHandler::handle_error(FatalError::TopLevelDuplicateDeclaration(name));
                 }
 
                 program.type_defs.insert(name, type_def);
@@ -60,7 +62,9 @@ impl Parser {
 
             if let Some(function_def) = maybe_function {
                 if program.function_defs.contains_key(&function_def.name) {
-                    ErrorHandler::handle_error(FatalError::DuplicateDeclaration(function_def.name));
+                    ErrorHandler::handle_error(FatalError::TopLevelDuplicateDeclaration(
+                        function_def.name,
+                    ));
                 }
 
                 program

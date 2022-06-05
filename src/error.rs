@@ -24,24 +24,24 @@ pub enum FatalError {
     // Parser errors
     UnexpectedToken(Token, TokenKind),
     UnexpectedSyntax(Vec<Syntax>, Token),
+    TopLevelDuplicateDeclaration(String),
 
     // Lexer/Parser errors
     UnexpectedEof(StreamPosition),
 
     // SemCheck errors
-    DuplicateDeclaration(String),
-    Undeclared(Declaration, String),
-    NotInLoop,
-    MismatchedTypes(Vec<String>, String),
-    InvalidCast(String, String),
-    NonPrimitiveCast,
-    NonStructMemberAccess(String),
-    NoSuchMember(String, String),
-    InvalidNumberOfArgs(usize, isize, usize),
-    OnlyBindingCatchAll,
+    DuplicateDeclaration(String, Vec<String>),
+    Undeclared(Declaration, String, Vec<String>),
+    NotInLoop(Vec<String>),
+    MismatchedTypes(Vec<String>, String, Vec<String>),
+    InvalidCast(String, String, Vec<String>),
+    NonPrimitiveCast(Vec<String>),
+    NonStructMemberAccess(String, Vec<String>),
+    NoSuchMember(String, String, Vec<String>),
+    InvalidNumberOfArgs(usize, isize, usize, Vec<String>),
+    OnlyBindingCatchAll(Vec<String>),
 
     // Runtime errors
-    RuntimeError(String, Vec<String>),
     InexhaustiveMatch(Vec<String>),
     DivideByZero,
 
@@ -112,48 +112,50 @@ impl ErrorHandler {
                     )
                 }
             }
-            FatalError::DuplicateDeclaration(name) => {
+            FatalError::TopLevelDuplicateDeclaration(name) => {
                 format!("Duplicate declaration of \"{}\"", name)
             }
-            FatalError::Undeclared(decl, name) => format!("Undeclared {} '{}'", decl, name),
-            FatalError::NotInLoop => "A break or continue must be inside of a loop".to_string(),
-            FatalError::MismatchedTypes(expected, got) => {
+            FatalError::DuplicateDeclaration(name, stack_trace) => {
+                format!("Duplicate declaration of \"{}\"\n\n{}", name, Self::format_stack_trace(stack_trace))
+            }
+            FatalError::Undeclared(decl, name, stack_trace) => format!("Undeclared {} '{}'\n\n{}", decl, name, Self::format_stack_trace(stack_trace)),
+            FatalError::NotInLoop(stack_trace) => format!("A break or continue must be inside of a loop\n\n{}", Self::format_stack_trace(stack_trace)),
+            FatalError::MismatchedTypes(expected, got, stack_trace) => {
                 if expected.len() == 1 {
-                    format!("Mismatched types: expected {}, got {}", expected[0], got)
+                    format!("Mismatched types: expected {}, got {}\n\n{}", expected[0], got, Self::format_stack_trace(stack_trace))
                 } else {
                     format!(
-                        "Mismatched types: expected one of {}; got {}",
+                        "Mismatched types: expected one of {}; got {}\n\n{}",
                         expected.join(", "),
                         got,
+                        Self::format_stack_trace(stack_trace),
                     )
                 }
             }
-            FatalError::InvalidCast(value, type_) => {
-                format!("Cannot cast '{}' to '{}'", value, type_)
+            FatalError::InvalidCast(value, type_, stack_trace) => {
+                format!("Cannot cast '{}' to '{}'\n\n{}", value, type_, Self::format_stack_trace(stack_trace))
             }
-            FatalError::NonPrimitiveCast => {
-                "Only primitive types (int, float and bool) can be cast using 'as' expression"
-                    .to_string()
+            FatalError::NonPrimitiveCast(stack_trace) => format!(
+                "Only primitive types (int, float and bool) can be cast using 'as' expression\n\n{}",
+                Self::format_stack_trace(stack_trace)
+            ),
+            FatalError::NonStructMemberAccess(name, stack_trace) => {
+                format!("Member access of non-struct variable '{}'\n\n{}", name, Self::format_stack_trace(stack_trace))
             }
-            FatalError::NonStructMemberAccess(name) => {
-                format!("Member access of non-struct variable '{}'", name)
+            FatalError::NoSuchMember(type_, member, stack_trace) => {
+                format!("'{}' has no such member: '{}'\n\n{}", type_, member, Self::format_stack_trace(stack_trace))
             }
-            FatalError::NoSuchMember(type_, member) => {
-                format!("'{}' has no such member: '{}'", type_, member)
-            }
-            FatalError::InvalidNumberOfArgs(from, to, got) => match to.cmp(&0) {
-                Ordering::Less => format!("Expected {} or more arguments, got {}", from, got),
-                Ordering::Equal => format!("Expected {} arguments, got {}", from, got),
+            FatalError::InvalidNumberOfArgs(from, to, got, stack_trace) => match to.cmp(&0) {
+                Ordering::Less => format!("Expected {} or more arguments, got {}\n\n{}", from, got, Self::format_stack_trace(stack_trace)),
+                Ordering::Equal => format!("Expected {} arguments, got {}\n\n{}", from, got, Self::format_stack_trace(stack_trace)),
                 Ordering::Greater => {
-                    format!("Expected from {} to {} arguments, got {}", from, to, got)
+                    format!("Expected from {} to {} arguments, got {}\n\n{}", from, to, got, Self::format_stack_trace(stack_trace))
                 }
             },
-            FatalError::OnlyBindingCatchAll => {
-                "A binding or catch-all ('_') must be the only pattern alternative".to_string()
-            }
-            FatalError::RuntimeError(msg, stack_trace) => {
-                format!("{}\n\n{}", msg, Self::format_stack_trace(stack_trace))
-            }
+            FatalError::OnlyBindingCatchAll(stack_trace) => format!(
+                "A binding or catch-all ('_') must be the only pattern alternative\n\n{}",
+                Self::format_stack_trace(stack_trace),
+            ),
             FatalError::InexhaustiveMatch(stack_trace) => format!(
                 "Inexhaustive match. Hint: use '_' to create a catch-all pattern.\n\n{}",
                 Self::format_stack_trace(stack_trace)

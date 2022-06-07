@@ -1,41 +1,54 @@
 program ::= (function_def | struct_def | enum_def | const_def | comment)*;
 comment ::= '//' #'[^\n]';
 
-var_def         ::= 'let' 'mut'? identifier identifier '=' expression ';';
-const_def       ::= 'const' identifier identifier '=' expression ';';
+var_def         ::= 'let' identifier '=' expression ';';
+const_def       ::= 'const' identifier '=' expression ';';
 enum_def        ::= 'enum' identifier '{' (identifier '(' identifier ')' ',')* (identifier '(' identifier ')')? '}';
 struct_def      ::= 'struct' identifier '{' (identifier identifier ',')* (identifier identifier)? '}';
-function_def    ::= 'fn' identifier '(' (identifier identifier ',')* (identifier identifier)? ')' ('->' identifier)? block_expr;
+function_def    ::= 'fn' identifier '(' (identifier identifier ',')* (identifier identifier)? ')' block_expr;
 
-statement       ::= var_def | assignment_stmt | return_stmt | yield_stmt | for_stmt | while_stmt | (if_expr | match_expr | block_expr) ';';
-while_stmt      ::= 'while' expression block_expr;
-for_stmt        ::= 'for' identifier identifier 'in' range block_expr;
-return_stmt     ::= 'return' expression ';';
-yield_stmt      ::= 'yield' expression ';';
-assignment_stmt ::= identifier assignment_op expression ';';
+statement               ::= var_def
+                          | return_stmt
+                          | yield_stmt
+                          | break_stmt
+                          | continue_stmt
+                          | for_stmt
+                          | while_stmt
+                          | if_expr
+                          | match_expr
+                          | identifier (rest_of_function_call ';' | rest_of_assignment_stmt);
+while_stmt              ::= 'while' expression block_expr;
+for_stmt                ::= 'for' identifier 'in' range block_expr;
+return_stmt             ::= 'return' expression? ';';
+yield_stmt              ::= 'yield' expression ';';
+break_stmt              ::= 'break' ';';
+continue_stmt           ::= 'continue' ';';
+rest_of_assignment_stmt ::= identifier assignment_op expression ';';
 
 block_expr  ::= '{' (statement | comment)* '}';
-match_expr  ::= 'match' identifier '{' (match_arm ',')* match_arm '}';
-if_expr     ::= 'if' expression block_expr ('else' 'if' expression block_expr)* ('else' block_expr)?;
+match_expr  ::= 'match' identifier '{' (match_arm ',')* match_arm ','? '}';
+if_expr     ::= if_branch else*;
+if_branch   ::= 'if' expression block_expr
+else        ::= 'else' (if_branch | block_expr)
 
 match_arm    ::= pattern '->' expression;
 pattern      ::= pattern_part ('|' pattern_part)*;
-pattern_part ::= identifier ('(' pattern? ')')? | literal_range | literal
+pattern_part ::= identifier ('.' identifier ('(' pattern? ')')?)? | literal_range | literal
 
-range ::= value ('..' | '..=') value;
-literal_range ::= integer ('..' | '..=') integer;
+range ::= value '..' '='? value;
+literal_range ::= integer '..' '='? integer;
 
-value               ::= function_call | member_access | identifier | literal | '(' expression ')';
-expression          ::= or_expr | if_expr | match_expr | block_expr;
-or_expr             ::= and_expr (or_op and_expr)*;
-and_expr            ::= relational_expr (and_op relational_expr)*;
-relational_expr     ::= additive_expr ((relational_op | equality_op) additive_expr)*;
-additive_expr       ::= multiplicative_expr (additive_op multiplicative_expr)*;
-multiplicative_expr ::= as_expr (multiplicative_op as_expr)*;
-as_expr             ::= unary_expr ("as" identifier)?;
-unary_expr          ::= unary_op* value;
-member_access       ::= identifier '.' identifier;
-function_call       ::= identifier '(' (expression ',')* expression? ')';
+value                   ::= identifier (rest_of_member_access | rest_of_function_call)? | literal | '(' expression ')';
+expression              ::= or_expr | if_expr | match_expr | block_expr;
+or_expr                 ::= and_expr (or_op and_expr)*;
+and_expr                ::= relational_expr (and_op relational_expr)*;
+relational_expr         ::= additive_expr ((relational_op | equality_op) additive_expr)*;
+additive_expr           ::= multiplicative_expr (additive_op multiplicative_expr)*;
+multiplicative_expr     ::= as_expr (multiplicative_op as_expr)*;
+as_expr                 ::= unary_expr ("as" identifier)?;
+unary_expr              ::= unary_op* value;
+rest_of_member_access   ::= ('.' identifier)+;
+rest_of_function_call   ::= '(' (expression ',')* expression? ')';
 
 unary_op            ::= '!' | '-';
 or_op               ::= '|';

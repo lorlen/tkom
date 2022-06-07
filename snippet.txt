@@ -1,7 +1,7 @@
 // comment
 
 // constant
-const u64 SOME_CONSTANT = 1;
+const SOME_CONSTANT = 1;
 
 // struct
 struct SomeStruct {
@@ -23,26 +23,25 @@ enum SomeEnum {
 // main - entry point, required
 fn main() {
     // immutable variable
-    let u64 var1 = 1;
+    let var1 = 1;
 
-    // mutable variable
-    let mut u64 var2 = 1;
+    let var2 = 1;
 
     // if expression
-    let string var3 = if var1 == 1 {
+    let var3 = if var1 == 1 {
         yield "var1 is 1";
     } else {
         yield "var1 is something else";
     };
 
     // for loop
-    for u64 i in 0 .. 10 {
+    for i in 0 .. 10 {
         print("index is ");
         println(i);
     }
 
     // for loop (inclusive end of range)
-    for u64 i in 0 ..= 10 {
+    for i in 0 ..= 10 {
         print("index is ");
         println(i);
     }
@@ -52,17 +51,17 @@ fn main() {
         var2 += 1;
     }
 
-    let SomeEnum var3 = new(EmptyVariant);
+    let var3 = new(SomeEnum.EmptyVariant);
 
     // match expression
     match var3 {
         // simple match
-        EmptyVariant() -> 1,
+        SomeEnum.EmptyVariant() -> 1,
 
         // match with variable binding
-        PrimitiveVariant(inner_val) -> inner_val,
+        SomeEnum.PrimitiveVariant(inner_val) -> inner_val,
 
-		StructVariant(str) -> {
+		SomeEnum.StructVariant(str) -> {
 			// block of code in an arm
 			println(str.field1);
 		}
